@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UNILU | Portail du Personnel</title>
+    <link rel="stylesheet" href="ai_studio_code.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;800&family=Outfit:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <!-- Animation Panel -->
+        <div class="animation-side">
+            <canvas id="particleCanvas"></canvas>
+        </div>
+
+        <!-- Login Section -->
+        <div class="login-side">
+            <div class="login-header">
+                <img src="Logo-unilu.webp" alt="Logo UNILU" class="brand-logo">
+                <div class="staff-portal-label">UNILU</div>
+                <div class="staff-portal-label" style="font-size: 0.65rem; opacity: 0.8; margin-bottom: 20px;">PORTAIL DU PERSONNEL</div>
+                <h1>Bienvenue sur le<br>portail UNILU.</h1>
+                <p>Gérez les cotes, les dossiers académiques, les recherches<br>et les profils étudiants en toute simplicité.</p>
+                <p><strong>Veuillez vous connecter pour commencer.</strong></p>
+            </div>
+
+            <form class="login-form">
+                <div class="input-group">
+                    <input type="text" id="email" placeholder="identification" required>
+                </div>
+                <div class="input-group">
+                    <input type="password" id="password" placeholder="mot de passe" required>
+                </div>
+                
+                <div class="options">
+                    <input type="checkbox" id="remember">
+                    <label for="remember">Se souvenir de moi</label>
+                </div>
+
+                <button type="submit" class="submit-btn">se connecter</button>
+            </form>
+
+            <div class="footer-links">
+                <p>Mot de passe oublié ? <a href="#">Cliquez ici.</a></p>
+            </div>
+        </div>
+    </div>
+    <script src="ai_studio_code.js"></script>
+</body>
+</html>

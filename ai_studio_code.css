@@ -1,0 +1,178 @@
+:root {
+    --primary-teal: #0a4a5c;
+    --accent-blue: #1ba9c1;
+    --light-teal: #5fb9bf;
+    --bg-white: #ffffff;
+    --text-dark: #2c3e50;
+    --input-bg: #d1d9de;
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    font-family: 'Inter', sans-serif;
+    background-color: var(--bg-white);
+    color: var(--text-dark);
+}
+
+.container {
+    display: flex;
+    height: 100vh;
+}
+
+.animation-side {
+    flex: 1.4;
+    background-color: var(--bg-white);
+    position: relative;
+    overflow: hidden;
+}
+
+#particleCanvas {
+    width: 100%;
+    height: 100%;
+}
+
+.login-side {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 0 5%;
+    background: var(--bg-white);
+    text-align: center;
+}
+
+.login-header {
+    margin-bottom: 20px;
+}
+
+.brand-logo {
+    width: 100px;
+    height: auto;
+    margin-top: 100px;
+    margin-bottom: 30px;
+}
+
+.login-header h1 {
+    font-family: 'Outfit', sans-serif;
+    color: var(--primary-teal);
+    font-size: 2.8rem;
+    font-weight: 800;
+    margin: 10px 0;
+    line-height: 1.1;
+}
+
+.login-header p {
+    color: #555;
+    font-size: 1rem;
+    max-width: 400px;
+    margin: 10px auto;
+}
+
+.staff-portal-label {
+    font-family: 'Outfit', sans-serif;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+    letter-spacing: 2px;
+    color: #444;
+}
+
+.login-form {
+    width: 100%;
+    max-width: 380px;
+}
+
+.input-group {
+    margin-bottom: 15px;
+}
+
+input[type="email"], input[type="password"], input[type="text"] {
+    width: 100%;
+    padding: 16px 20px;
+    border: none;
+    border-radius: 50px;
+    background: var(--input-bg);
+    font-size: 1rem;
+    color: var(--primary-teal);
+    box-sizing: border-box;
+    transition: all 0.3s ease;
+}
+
+input[type="email"]:focus, input[type="password"]:focus, input[type="text"]:focus {
+    outline: none;
+    background: #c3ced5;
+}
+
+.options {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.options label {
+    font-size: 0.9rem;
+    color: #666;
+    cursor: pointer;
+}
+
+.submit-btn {
+    width: 100%;
+    padding: 16px;
+    border: none;
+    border-radius: 50px;
+    background-color: var(--primary-teal);
+    color: white;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-transform: lowercase;
+    margin-top: 15px; /* Pushed higher up */
+}
+
+.submit-btn:hover {
+    background-color: var(--accent-blue);
+    box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+}
+
+.footer-links {
+    margin-top: 60px;
+    font-size: 0.85rem;
+    color: #777;
+    line-height: 1.8;
+}
+
+.footer-links a {
+    color: var(--text-dark);
+    text-decoration: underline;
+    font-weight: 700;
+}
+
+@media (max-width: 900px) {
+    .container {
+        flex-direction: column-reverse;
+    }
+    .animation-side {
+        height: 35vh;
+    }
+    .login-side {
+        padding: 40px 20px;
+    }
+}
+
+@media (max-width: 900px) {
+    .container {
+        flex-direction: column-reverse;
+    }
+    .animation-side {
+        height: 35vh;
+    }
+    .login-side {
+        padding: 40px 20px;
+    }
+}
