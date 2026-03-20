@@ -14,5 +14,5 @@ Ce système permet de :
 
 ## Installation & Usage
 1. Cloner le dépôt.
-2. Ouvrir `ai_studio_code.html` pour accéder au portail.
+2. Ouvrir `index.html` pour accéder au portail.
 3. Les données sont chargées dynamiquement depuis `students_results.json`.
