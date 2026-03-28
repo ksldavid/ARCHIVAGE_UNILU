@@ -17,10 +17,11 @@ let students = [
 // Fonction pour charger les données réelles (Excel converti en JSON)
 async function loadStudentsData() {
     try {
-        const response = await fetch('students_results.json');
+        // Ajout d'un timestamp pour forcer le rechargement du JSON (anti-cache)
+        const ts = new Date().getTime();
+        const response = await fetch('students_results.json?t=' + ts);
         if (response.ok) {
             const realData = await response.json();
-            // On ajoute les vrais étudiants à notre liste existante
             students = [...students, ...realData];
             console.log(`${realData.length} étudiants chargés depuis l'Excel.`);
         }
@@ -70,62 +71,108 @@ searchInput.addEventListener('input', (e) => {
 });
 
 function selectStudent(student) {
-    searchInput.value = student.name;
-    suggestions.style.display = 'none';
-    quickTips.style.display = 'none';
+    if (!student) return;
     
-    // Fill result data
-    nameDisplay.innerText = student.name.toUpperCase();
-    detailsDisplay.innerText = `${student.faculty} • Matricule: ${student.matricule} • ${student.level}`;
-    sourceDisplay.innerText = student.source;
+    // 1. Forcer la valeur dans la barre
+    const input = document.getElementById('studentSearch');
+    if (input) input.value = student.name;
+    
+    // 2. Cacher les suggestions
+    const suggestionsList = document.getElementById('suggestions');
+    if (suggestionsList) suggestionsList.style.display = 'none';
 
-    gradeTableBody.innerHTML = '';
-    student.grades.forEach(grade => {
-        const tr = document.createElement('tr');
+    try {
+        // 3. Récupérer les zones d'affichage
+        const area = document.getElementById('resultsArea');
+        const tips = document.getElementById('quickTips');
         
-        // On détecte si c'est une ligne de moyenne
-        const isMoyenne = grade.course.toLowerCase().includes('moyenne');
-        if (isMoyenne) {
-            tr.classList.add('highlight-row');
+        // 4. Inversion immédiate de la visibilité
+        if (tips) tips.style.setProperty('display', 'none', 'important');
+        if (area) {
+            area.style.setProperty('display', 'block', 'important');
+            area.style.opacity = '1';
+            area.classList.add('visible');
         }
 
-        const badgeClass = grade.score >= 15 ? 'grade-a' : (grade.score >= 12 ? 'grade-b' : 'grade-c');
-        
-        tr.innerHTML = `
-            <td style="${isMoyenne ? 'font-weight: bold; color: #63b3ed;' : ''}">${grade.course}</td>
-            <td style="color: #a0aec0; font-family: monospace;">${grade.code}</td>
-            <td><span class="grade-badge ${badgeClass}">${grade.score.toFixed(1)}</span></td>
-            <td>${grade.result}</td>
-            <td>${grade.session}</td>
-            <td>${grade.date}</td>
-        `;
-        gradeTableBody.appendChild(tr);
-    });
+        // 5. Remplir les textes
+        const nameEl = document.getElementById('studentNameDisplay');
+        const detailEl = document.getElementById('studentDetailsDisplay');
+        const sourceEl = document.getElementById('sourceFileName');
 
-    resultsArea.style.display = 'block';
-    setTimeout(() => {
-        resultsArea.classList.add('visible');
-    }, 10);
+        if (nameEl) nameEl.innerText = (student.name || "N/A").toUpperCase();
+        if (detailEl) detailEl.innerText = `${student.faculty || ''} • Matricule: ${student.matricule || ''} • ${student.level || ''}`;
+        if (sourceEl) sourceEl.innerText = student.source || "";
+
+        // 6. Remplir le tableau
+        const table = document.getElementById('gradeTableBody');
+        if (table && student.grades) {
+            table.innerHTML = '';
+            student.grades.forEach(grade => {
+                const tr = document.createElement('tr');
+                const isMoyenne = grade.course && grade.course.toLowerCase().includes('moyenne');
+                if (isMoyenne) tr.classList.add('highlight-row');
+
+                // La valeur peut être un nombre OU un texte (ex: DECISION = 'NV2')
+                const isNumeric = typeof grade.score === 'number';
+                const score = isNumeric ? grade.score : null;
+                const scoreDisplay = isNumeric ? grade.score.toFixed(1) : grade.score;
+                const badge = (score !== null && score >= 15) ? 'grade-a' : ((score !== null && score >= 12) ? 'grade-b' : 'grade-c');
+                
+                tr.innerHTML = `
+                    <td>${grade.course || ''}</td>
+                    <td style="color: #a0aec0;">${grade.code || ''}</td>
+                    <td>${isNumeric ? `<span class="grade-badge ${badge}">${scoreDisplay}</span>` : `<strong style="color:#4a5568">${scoreDisplay}</strong>`}</td>
+                    <td>${grade.result || ''}</td>
+                    <td>${grade.session || ''}</td>
+                    <td>${grade.date || ''}</td>
+                `;
+                table.appendChild(tr);
+            });
+        }
+
+        // 7. Remplir les statistiques finales
+        if (student.stats) {
+            const s = student.stats;
+            const echecs = document.getElementById('statEchecs');
+            const total  = document.getElementById('statTotal');
+            const moy    = document.getElementById('statMoyenne');
+            const cred   = document.getElementById('statCredits');
+            const dec    = document.getElementById('statDecision');
+            if (echecs) echecs.innerText = s.echecs ?? '-';
+            if (total)  total.innerText  = s.total  ?? '-';
+            if (moy)    moy.innerText    = typeof s.moyenne === 'number' ? s.moyenne.toFixed(2) : '-';
+            if (cred)   cred.innerText   = (s.credits ?? '-') + ' / 60';
+            if (dec)    dec.innerText    = s.decision ?? '-';
+            const summaryEl = document.getElementById('statsSummary');
+            if (summaryEl) summaryEl.style.display = 'flex';
+        } else {
+            const summaryEl = document.getElementById('statsSummary');
+            if (summaryEl) summaryEl.style.display = 'none';
+        }
+
+    } catch (e) {
+        console.error("Erreur lors de l'affichage :", e);
+    }
 }
 
-// Mock Download PDF
-document.getElementById('downloadBtn').onclick = () => {
-    // Génère un numéro de référence aléatoire pour l'aspect officiel
-    const randomId = Math.floor(Math.random() * 9000000000 + 1000000000);
-    document.getElementById('idNumber').innerText = randomId;
-    
-    // Met à jour la date du jour
-    const today = new Date();
-    const options = { year: 'numeric', month: 'long', day: 'numeric' };
-    document.getElementById('currentDate').innerText = today.toLocaleDateString('fr-FR', options);
+// Relai des boutons
+document.addEventListener('DOMContentLoaded', () => {
+    const downloadBtn = document.getElementById('downloadBtn');
+    if (downloadBtn) {
+        downloadBtn.onclick = () => {
+            const randomId = Math.floor(Math.random() * 9000000000 + 1000000000);
+            if (document.getElementById('idNumber')) document.getElementById('idNumber').innerText = randomId;
+            const today = new Date();
+            if (document.getElementById('currentDate')) document.getElementById('currentDate').innerText = today.toLocaleDateString('fr-FR', { year: 'numeric', month: 'long', day: 'numeric' });
+            window.print();
+        };
+    }
+});
 
-    // Lance l'impression (qui utilisera notre style officiel)
-    window.print();
-};
-
-// Handle clicks outside suggestons
 document.addEventListener('click', (e) => {
-    if (e.target !== searchInput) {
-        suggestions.style.display = 'none';
+    const sInput = document.getElementById('studentSearch');
+    const sList = document.getElementById('suggestions');
+    if (sInput && sList && e.target !== sInput) {
+        sList.style.display = 'none';
     }
 });

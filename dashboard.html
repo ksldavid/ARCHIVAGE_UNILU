@@ -116,6 +116,31 @@
                     </table>
                 </div>
 
+                <!-- Récapitulatif Final -->
+                <div class="stats-summary" id="statsSummary">
+                    <div class="stat-box">
+                        <span class="stat-label">Échecs</span>
+                        <span class="stat-value" id="statEchecs">0</span>
+                    </div>
+                    <div class="stat-boxHighlight">
+                        <span class="stat-label">Total Pondéré</span>
+                        <span class="stat-value" id="statTotal">0</span>
+                    </div>
+                    <div class="stat-boxHighlight">
+                        <span class="stat-label">Moyenne Annuelle</span>
+                        <span class="stat-value" id="statMoyenne">0.00</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="stat-label">Crédits Validés</span>
+                        <span class="stat-value" id="statCredits">0 / 60</span>
+                    </div>
+                    <div class="stat-boxDecision">
+                        <span class="stat-label">DÉCISION</span>
+                        <span class="stat-value" id="statDecision">-</span>
+                    </div>
+                </div>
+
+
                 <div class="card-footer" style="margin-top: 30px; padding-top: 20px; border-top: 1px dashed #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
                     <div class="source-info">
                         <p style="font-size: 0.8rem; color: #a0aec0;"><i class="fas fa-file-excel" style="color: #2f855a;"></i> Fichier source : <span id="sourceFileName">relais_notes_polytech_2023.csv</span></p>
@@ -142,6 +167,6 @@
         </div>
     </main>
 
-    <script src="dashboard.js"></script>
+    <script src="dashboard.js?v=2"></script>
 </body>
 </html>
