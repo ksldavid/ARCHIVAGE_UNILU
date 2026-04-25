@@ -1,0 +1,82 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Table des Facultés
+model Faculty {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  departments Department[]
+  archives    Archive[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+// Table des Départements
+model Department {
+  id         String      @id @default(cuid())
+  name       String
+  faculty    Faculty     @relation(fields: [facultyId], references: [id])
+  facultyId  String
+  promotions Promotion[]
+  archives   Archive[]
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@unique([name, facultyId])
+}
+
+// Table des Promotions
+model Promotion {
+  id           String     @id @default(cuid())
+  name         String
+  department   Department @relation(fields: [departmentId], references: [id])
+  departmentId String
+  archives     Archive[]
+  createdAt    DateTime   @default(now())
+
+  @@unique([name, departmentId])
+}
+
+// Table des Sessions
+model Session {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  archives  Archive[]
+  createdAt DateTime  @default(now())
+}
+
+// Table des Étudiants
+model Student {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  archives  Archive[]
+  createdAt DateTime  @default(now())
+}
+
+// Table des Archives
+model Archive {
+  id               String      @id @default(cuid())
+  student          Student     @relation(fields: [studentId], references: [id])
+  studentId        String
+  faculty          Faculty     @relation(fields: [facultyId], references: [id]) // NOUVEAU: Obligatoire
+  facultyId        String
+  department       Department? @relation(fields: [departmentId], references: [id]) // OPTIONNEL
+  departmentId     String?
+  promotion        Promotion   @relation(fields: [promotionId], references: [id])
+  promotionId      String
+  academicYear     String
+  session          Session     @relation(fields: [sessionId], references: [id])
+  sessionId        String
+  decision         String
+  referenceLink    String?
+  createdAt        DateTime    @default(now())
+}

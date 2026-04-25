@@ -5,3 +5,12 @@ __pycache__/
 .ipynb_checkpoints/
 .DS_Store
 *.xlsx
+node_modules/
+.next/
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+/generated/prisma
+.vscode/
