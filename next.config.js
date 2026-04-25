@@ -3,4 +3,4 @@ const nextConfig = {
   /* Config options here */
 }
 
-module.exports = nextConfig
+export default nextConfig
