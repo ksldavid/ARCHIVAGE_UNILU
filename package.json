@@ -1,7 +1,6 @@
 {
   "name": "site_de_archive",
   "version": "1.0.0",
-  "type": "module",
   "description": "Portail d'archivage des résultats académiques de l'Université de Lubumbashi (UNILU).",
   "scripts": {
     "dev": "next dev",
