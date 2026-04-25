@@ -1,4 +1,5 @@
 'use client'
+// Final deployment trigger with Next.js preset
 
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
