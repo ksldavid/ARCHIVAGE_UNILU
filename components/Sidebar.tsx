@@ -19,7 +19,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="nav-links">
-        <Link href="/" className={`nav-item-link ${pathname === '/' ? 'active' : ''}`}>
+        <Link href="/dashboard" className={`nav-item-link ${pathname === '/dashboard' ? 'active' : ''}`}>
           <Search size={20} /><span>Recherche</span>
         </Link>
         <Link href="#" className="nav-item-link">
@@ -44,7 +44,7 @@ export default function Sidebar() {
         <Link href="#" className="nav-item-link">
           <Settings size={20} /><span>Paramètres</span>
         </Link>
-        <Link href="/login" className="nav-item-link">
+        <Link href="/" className="nav-item-link">
           <LogOut size={20} /><span>Déconnexion</span>
         </Link>
       </div>
