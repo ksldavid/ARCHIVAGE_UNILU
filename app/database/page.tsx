@@ -7,12 +7,13 @@ import {
   PlusCircle, Upload, FileText, Database, ShieldCheck,
   Loader2, Layers, Calendar, Trash2, ExternalLink,
   Search, Settings, Filter, AlertCircle, CheckCircle,
-  XCircle, Download, ArrowRight
+  XCircle, Download, ArrowRight, UploadCloud
 } from 'lucide-react'
 import {
   createFaculty, createDepartment, createPromotion, createSession,
   getAppData, importArchives, deleteArchive, clearArchivesAndStudents,
-  deleteFaculty, deleteDepartment, deletePromotion, deleteSession
+  deleteFaculty, deleteDepartment, deletePromotion, deleteSession,
+  deleteArchiveGroup
 } from '../actions'
 import Sidebar from '../../components/Sidebar'
 
@@ -22,6 +23,7 @@ export default function DatabasePage() {
   const [activeTab, setActiveTab] = useState('import')
   const [loading, setLoading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
+  const [uploadStep, setUploadStep] = useState('')
   const [isDragging, setIsDragging] = useState(false)
   const [dragCounter, setDragCounter] = useState(0)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -49,6 +51,10 @@ export default function DatabasePage() {
 
   const [selectedFacultyManage, setSelectedFacultyManage] = useState('')
   const [selectedDeptManage, setSelectedDeptManage] = useState('')
+
+  // Double confirmation suppression
+  const [deleteRequest, setDeleteRequest] = useState<{ type: string, id: string, name: string } | null>(null)
+  const [confirmInput, setConfirmInput] = useState('')
 
   // --- Chargement ---
   const loadData = async () => {
@@ -90,41 +96,66 @@ export default function DatabasePage() {
       try {
         const bstr = evt.target?.result
         const wb = XLSX.read(bstr, { type: 'binary' })
-        const wsname = wb.SheetNames[0]
-        const ws = wb.Sheets[wsname]
-        const rawJson = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][]
+        const ws = wb.Sheets[wb.SheetNames[0]]
+        
+        // On récupère TOUT en brut (tableau de tableaux)
+        const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][]
+        
+        // 1. Trouver la ligne d'en-tête et les indices des colonnes
+        let nameColIndex = -1
+        let decisionColIndex = -1
+        let headerIndex = -1
 
-        let headerRowIndex = 0
-        for (let i = 0; i < Math.min(rawJson.length, 25); i++) {
-          const row = rawJson[i]
-          if (row && row.some(cell => {
-            const c = String(cell).toUpperCase()
-            return c.includes('NOMS ET PRÉNOM') || c.includes('NOMS ET PRENOM') || (c.includes('NOM') && c.includes('PRENOM'))
-          })) {
-            headerRowIndex = i
-            break
+        const cleanStr = (v: any) => String(v || '').toUpperCase().replace(/\s+/g, '').trim()
+
+        for (let i = 0; i < Math.min(rawData.length, 60); i++) {
+          const row = rawData[i]
+          if (!row) continue
+          
+          for (let j = 0; j < row.length; j++) {
+            const cell = cleanStr(row[j])
+            if (cell.includes('NOM') && (cell.includes('PRENOM') || cell.includes('POST') || cell.includes('COMPLET'))) {
+              nameColIndex = j
+              headerIndex = i
+            }
+            if (cell.includes('DECISION') || cell.includes('JURY')) {
+              decisionColIndex = j
+              if (headerIndex === -1) headerIndex = i
+            }
+          }
+          if (nameColIndex !== -1 && decisionColIndex !== -1) break
+        }
+
+        if (nameColIndex === -1) {
+          // Si on n'a pas trouvé de header explicite, on cherche juste une colonne qui a "NOM"
+          for (let i = 0; i < Math.min(rawData.length, 40); i++) {
+             const j = rawData[i]?.findIndex(c => cleanStr(c).includes('NOM'))
+             if (j !== -1) { nameColIndex = j; headerIndex = i; break; }
           }
         }
 
-        const data = XLSX.utils.sheet_to_json(ws, { range: headerRowIndex }) as any[]
-        if (data.length === 0) return alert('Le fichier est vide.')
+        if (nameColIndex === -1) return alert("Désolé, je ne trouve pas la colonne des noms dans ce fichier.")
 
-        const cols = Object.keys(data[0])
-        setAvailableColumns(cols)
-        setRawRows(data)
+        // 2. Extraire les données à partir de la ligne après le header
+        const finalRows: any[] = []
+        for (let i = headerIndex + 1; i < rawData.length; i++) {
+          const row = rawData[i]
+          if (!row || !row[nameColIndex]) continue
+          
+          const name = String(row[nameColIndex]).trim()
+          // Ignorer les lignes qui ne sont pas des noms (chiffres, titres, etc.)
+          if (name.length < 3 || !/[a-zA-Z]/.test(name) || name.toUpperCase() === 'NOM') continue
+          
+          const decision = decisionColIndex !== -1 ? String(row[decisionColIndex] || '—').trim() : '—'
+          
+          finalRows.push({ nom: name.toUpperCase(), decision: decision.toUpperCase() })
+        }
 
-        const autoNom = cols.find(k => k.toUpperCase().includes('NOM')) || ''
-        const autoDecision = [...cols].reverse().find(k => {
-          const c = k.toUpperCase().trim()
-          return c === 'DECISION' || c === 'DÉCISION' || c === 'ADM' || c === 'JURY'
-        }) || ''
-
-        setNomColumn(autoNom)
-        setDecisionColumn(autoDecision)
-
-        if (!autoNom || !autoDecision) setShowMapping(true)
-        else buildPreview(data, autoNom, autoDecision)
-      } catch (err) { alert("Erreur Excel.") }
+        if (finalRows.length === 0) return alert("Aucune donnée d'étudiant trouvée.")
+        
+        setPreviewData(finalRows)
+        setShowMapping(false)
+      } catch (err) { alert("Erreur lors de la lecture du fichier.") }
     }
     reader.readAsBinaryString(file)
   }
@@ -163,9 +194,17 @@ export default function DatabasePage() {
     if (file) processFile(file)
   }
 
+
+
+  // --- Chargement ---
+  // ... (inchangé)
+
   const handleFinalUpload = async () => {
     if (!selectedFile) return
     setLoading(true)
+    setUploadProgress(10)
+    setUploadStep('Téléchargement du fichier sur le serveur...')
+    
     const formData = new FormData()
     formData.append('file', selectedFile)
     formData.append('facultyId', selectedFaculty)
@@ -174,30 +213,59 @@ export default function DatabasePage() {
     formData.append('sessionId', selectedSession)
     formData.append('year', academicYear)
 
+    // Simulation de progression pendant que le serveur travaille
+    const interval = setInterval(() => {
+      setUploadProgress(prev => {
+        if (prev < 40) { setUploadStep('Envoi sécurisé sur le Cloud...'); return prev + 2; }
+        if (prev < 70) { setUploadStep('Analyse intelligente des colonnes...'); return prev + 1; }
+        if (prev < 95) { setUploadStep('Archivage groupé des étudiants...'); return prev + 0.5; }
+        return prev
+      })
+    }, 150)
+
     try {
       await importArchives(formData)
-      setShowSuccess(true)
-      setLoading(false)
-      setPreviewData(null)
-      setSelectedFile(null)
-      loadData()
-      setTimeout(() => setShowSuccess(false), 3000)
+      clearInterval(interval)
+      setUploadProgress(100)
+      setUploadStep('Archivage terminé avec succès !')
+      
+      setTimeout(() => {
+        setShowSuccess(true)
+        setLoading(false)
+        setPreviewData(null)
+        setSelectedFile(null)
+        setUploadProgress(0)
+        loadData()
+        setTimeout(() => setShowSuccess(false), 3000)
+      }, 500)
     } catch (error) {
+      clearInterval(interval)
       alert("Erreur serveur.")
       setLoading(false)
+      setUploadProgress(0)
     }
   }
 
-  const handleDeleteItem = async (type: string, id: string, name: string) => {
-    if (!confirm(`Supprimer "${name}" ?`)) return
+  const handleDeleteItem = async () => {
+    if (!deleteRequest || confirmInput !== 'SUPPRIMER') return
+    
+    setLoading(true)
     try {
-      if (type === 'archive') await deleteArchive(id)
-      else if (type === 'faculty') await deleteFaculty(id)
-      else if (type === 'dept') await deleteDepartment(id)
-      else if (type === 'promo') await deletePromotion(id)
-      else if (type === 'session') await deleteSession(id)
+      if (deleteRequest.type === 'archive') await deleteArchive(deleteRequest.id)
+      else if (deleteRequest.type === 'archiveGroup') await deleteArchiveGroup(deleteRequest.id)
+      else if (deleteRequest.type === 'faculty') await deleteFaculty(deleteRequest.id)
+      else if (deleteRequest.type === 'dept') await deleteDepartment(deleteRequest.id)
+      else if (deleteRequest.type === 'promo') await deletePromotion(deleteRequest.id)
+      else if (deleteRequest.type === 'session') await deleteSession(deleteRequest.id)
+      
+      setDeleteRequest(null)
+      setConfirmInput('')
       await loadData()
-    } catch(e) {}
+    } catch(e) {
+      alert("Erreur lors de la suppression. Vérifiez si des éléments dépendants existent.")
+    } finally {
+      setLoading(false)
+    }
   }
 
   if (!mounted) return null
@@ -215,14 +283,120 @@ export default function DatabasePage() {
       <Sidebar />
 
       <main className="main-content">
-        {loading && (
+        {(loading && !deleteRequest) && (
           <div className="loading-overlay">
-            <div className="loading-card animate-pop shadow-card">
-              <Loader2 className="animate-spin mx-auto" size={48} color="var(--primary-blue)" />
-              <h3 className="mt-4 font-bold" style={{ color: 'var(--primary-blue)' }}>Archivage en cours...</h3>
-              <p className="text-sm text-muted mt-2">Veuillez patienter pendant le traitement des données.</p>
+            <div className="loading-card animate-pop shadow-card" style={{ maxWidth: '500px', width: '90%' }}>
+              <div className="flex items-center justify-between mb-6">
+                <div style={{ background: 'var(--primary-blue)', padding: '12px', borderRadius: '12px', color: 'white' }}>
+                  <UploadCloud className={uploadProgress < 100 ? "animate-bounce" : ""} size={28} />
+                </div>
+                <span style={{ fontWeight: 900, fontSize: '1.5rem', color: 'var(--primary-blue)' }}>{Math.round(uploadProgress)}%</span>
+              </div>
+              
+              <h3 className="font-black text-xl mb-2" style={{ color: 'var(--primary-blue)', textAlign: 'left' }}>
+                {uploadProgress < 100 ? 'Traitement de vos archives...' : 'Traitement terminé !'}
+              </h3>
+              <p className="text-sm text-muted mb-6" style={{ textAlign: 'left', fontWeight: 500 }}>{uploadStep}</p>
+              
+              {/* BARRE DE PROGRESSION PREMIUM */}
+              <div style={{ 
+                width: '100%', height: '12px', background: '#f1f5f9', 
+                borderRadius: '100px', overflow: 'hidden', marginBottom: '10px',
+                border: '1px solid #e2e8f0'
+              }}>
+                <div style={{ 
+                  width: `${uploadProgress}%`, height: '100%', 
+                  background: 'linear-gradient(90deg, var(--accent-cyan), var(--primary-blue))',
+                  borderRadius: '100px', transition: 'width 0.3s ease-out',
+                  boxShadow: '0 0 15px rgba(6, 182, 212, 0.4)'
+                }}></div>
+              </div>
+              
+              <div className="flex justify-between items-center text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+                <span>DÉBUT</span>
+                <span>ARCHIVAGE FINAL</span>
+              </div>
             </div>
           </div>
+        )}
+
+        {/* MODALE DE SUPPRESSION SECURISÉE PREMIUM */}
+        {deleteRequest && createPortal(
+          <div className="loading-overlay" style={{ background: 'rgba(15, 23, 42, 0.6)', backdropFilter: 'blur(12px)', zIndex: 1100 }}>
+            <div className="animate-pop shadow-card" style={{ 
+              background: 'white', borderRadius: '30px', padding: '40px', 
+              maxWidth: '500px', width: '90%', border: '1px solid #f1f5f9',
+              textAlign: 'center'
+            }}>
+              <div style={{ 
+                background: '#fff1f2', width: '80px', height: '80px', 
+                borderRadius: '24px', display: 'flex', alignItems: 'center', 
+                justifyContent: 'center', margin: '0 auto 24px', color: '#e11d48'
+              }}>
+                <Trash2 size={40} />
+              </div>
+              
+              <h3 style={{ fontSize: '1.6rem', fontWeight: 900, color: 'var(--primary-blue)', margin: '0 0 12px 0' }}>Confirmation Requise</h3>
+              
+              <p style={{ color: '#64748b', fontSize: '1rem', lineHeight: '1.6', margin: '0 0 30px 0' }}>
+                Vous allez supprimer définitivement <br/>
+                <strong style={{ color: '#1e293b', fontSize: '1.1rem' }}>{deleteRequest.name}</strong>.
+              </p>
+              
+              <div style={{ 
+                background: '#f8fafc', padding: '24px', borderRadius: '20px', 
+                border: '2px dashed #e2e8f0', marginBottom: '30px'
+              }}>
+                <p style={{ 
+                  fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8', 
+                  textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '12px'
+                }}>Tapez le mot ci-dessous pour confirmer :</p>
+                
+                <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#cbd5e1', marginBottom: '15px', letterSpacing: '2px' }}>SUPPRIMER</div>
+                
+                <input 
+                  type="text" 
+                  style={{ 
+                    width: '100%', padding: '16px', borderRadius: '14px', 
+                    border: `2px solid ${confirmInput === 'SUPPRIMER' ? '#10b981' : '#e2e8f0'}`,
+                    outline: 'none', background: 'white', fontWeight: 900, 
+                    fontSize: '1.2rem', textAlign: 'center', color: 'var(--primary-blue)',
+                    boxShadow: '0 4px 6px rgba(0,0,0,0.02)', transition: 'all 0.2s'
+                  }}
+                  placeholder="Tapez ici..."
+                  value={confirmInput}
+                  onChange={(e) => setConfirmInput(e.target.value.toUpperCase())}
+                  autoFocus
+                />
+              </div>
+              
+              <div style={{ display: 'flex', gap: '12px' }}>
+                <button 
+                  className="btn-premium" 
+                  style={{ flex: 1, background: '#f1f5f9', color: '#64748b', border: 'none', padding: '18px' }}
+                  onClick={() => { setDeleteRequest(null); setConfirmInput(''); }}
+                >
+                  Annuler
+                </button>
+                <button 
+                  className="btn-premium" 
+                  style={{ 
+                    flex: 2, padding: '18px',
+                    background: confirmInput === 'SUPPRIMER' ? '#e11d48' : '#e2e8f0',
+                    color: 'white', border: 'none',
+                    opacity: confirmInput === 'SUPPRIMER' ? 1 : 0.5,
+                    cursor: confirmInput === 'SUPPRIMER' ? 'pointer' : 'not-allowed',
+                    boxShadow: confirmInput === 'SUPPRIMER' ? '0 10px 20px rgba(225, 29, 72, 0.2)' : 'none'
+                  }}
+                  disabled={confirmInput !== 'SUPPRIMER' || loading}
+                  onClick={handleDeleteItem}
+                >
+                  {loading ? <Loader2 className="animate-spin mx-auto" /> : 'Confirmer la suppression'}
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body
         )}
 
         <div className="animate-fade-in">
@@ -265,11 +439,12 @@ export default function DatabasePage() {
 
             {activeTab === 'import' && (
               <div className="p-0">
-                {!previewData && !showMapping ? (
+                {/* 1. SELECTION INITIALE DU FICHIER */}
+                {!previewData && !showMapping && (
                   <div className="config-grid">
                     <div className="config-section">
                       <div className="config-section-title"><Filter size={20} /> Configuration du fichier</div>
-                      
+                      {/* ... (formulaire inchangé) */}
                       <div className="form-group">
                         <label className="form-label">Faculté cible</label>
                         <select value={selectedFaculty} onChange={(e) => { setSelectedFaculty(e.target.value); setSelectedDept(''); }} className="form-select-premium">
@@ -315,9 +490,7 @@ export default function DatabasePage() {
                         className={`drop-zone-premium ${isDragging ? 'active' : ''}`}
                         onDragEnter={onDragEnter} onDragOver={onDragOver} onDragLeave={onDragLeave} onDrop={onDrop}
                       >
-                        <div className="drop-zone-icon">
-                          <Upload size={32} />
-                        </div>
+                        <div className="drop-zone-icon"><Upload size={32} /></div>
                         <h3 className="drop-zone-title">Sélectionner un fichier Excel</h3>
                         <p className="drop-zone-text mb-4">Glissez-déposez le fichier ici ou cliquez pour parcourir.</p>
                         <label htmlFor="file-upload" className="btn-premium" style={{ display: 'inline-flex', cursor: 'pointer' }}>
@@ -327,15 +500,79 @@ export default function DatabasePage() {
                       </div>
                     </div>
                   </div>
-                ) : (
-                  <div className="p-8">
+                )}
+
+                {/* 2. MAPPING MANUEL (SI AUTO-DETECTION ECHOUE) */}
+                {showMapping && !previewData && (
+                  <div className="p-12 animate-pop">
+                    <div style={{ maxWidth: '600px', margin: '0 auto', background: 'white', padding: '40px', borderRadius: '24px', border: '1px solid #f1f5f9', boxShadow: '0 20px 40px rgba(0,0,0,0.05)' }}>
+                      <div style={{ background: '#f0f9fb', width: '60px', height: '60px', borderRadius: '18px', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', color: 'var(--accent-cyan)' }}>
+                        <Settings size={30} />
+                      </div>
+                      <h3 className="text-center font-black text-xl mb-2" style={{ color: 'var(--primary-blue)' }}>Configuration manuelle</h3>
+                      <p className="text-center text-muted text-sm mb-8">Nous n'avons pas pu identifier automatiquement les colonnes. Veuillez les sélectionner ci-dessous.</p>
+                      
+                      <div className="form-group mb-6">
+                        <label className="form-label font-bold">Colonne contenant les NOMS</label>
+                        <select value={nomColumn} onChange={e => setNomColumn(e.target.value)} className="form-select-premium">
+                          <option value="">Sélectionner une colonne...</option>
+                          {availableColumns.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="form-group mb-8">
+                        <label className="form-label font-bold">Colonne contenant la DÉCISION</label>
+                        <select value={decisionColumn} onChange={e => setDecisionColumn(e.target.value)} className="form-select-premium">
+                          <option value="">Sélectionner une colonne...</option>
+                          {availableColumns.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+
+                      <div className="flex gap-4">
+                        <button className="btn-premium flex-1" style={{ background: '#f8fafc', color: '#64748b', border: 'none' }} onClick={() => setShowMapping(false)}>
+                          Annuler
+                        </button>
+                        <button 
+                          className="btn-premium flex-1" 
+                          disabled={!nomColumn || !decisionColumn}
+                          onClick={() => buildPreview(rawRows, nomColumn, decisionColumn)}
+                        >
+                          Générer l'aperçu <ArrowRight size={18} className="ml-2" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* 3. APERÇU FINAL AVANT IMPORTATION */}
+                {previewData && (
+                  <div className="p-8 animate-fade-in">
                     <div className="flex justify-between items-center mb-6 pb-6" style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <div>
-                        <h3 className="font-bold text-xl" style={{ color: 'var(--primary-blue)' }}>Aperçu des données avant importation</h3>
-                        <p className="text-sm text-muted mt-2">Vérifiez que les noms et les décisions ont été correctement détectés.</p>
+                        <div className="flex items-center gap-3">
+                          <h3 className="font-bold text-xl" style={{ color: 'var(--primary-blue)', margin: 0 }}>Aperçu des données détectées</h3>
+                          <span style={{ 
+                            background: 'var(--accent-cyan)', color: 'white', 
+                            padding: '4px 12px', borderRadius: '100px', 
+                            fontSize: '0.85rem', fontWeight: 'bold',
+                            boxShadow: '0 4px 10px rgba(6, 182, 212, 0.2)'
+                          }}>
+                            {previewData.length} étudiants trouvés
+                          </span>
+                        </div>
+                        <p className="text-sm text-muted mt-2">Ci-dessous les 10 premiers pour vérification. L'intégralité des <strong>{previewData.length}</strong> lignes sera archivée.</p>
                       </div>
                       <div className="flex gap-3">
-                        <button className="btn-premium" style={{ background: '#f8fafc', color: 'var(--text-main)', border: '1px solid #e2e8f0' }} onClick={() => { setPreviewData(null); setSelectedFile(null); }}>
+                        <button 
+                          className="btn-premium" 
+                          style={{ background: '#f8fafc', color: 'var(--text-main)', border: '1px solid #e2e8f0' }} 
+                          onClick={() => { 
+                            setPreviewData(null); 
+                            setSelectedFile(null); 
+                            setShowMapping(false);
+                            setRawRows([]);
+                          }}
+                        >
                           <XCircle size={18} /> Annuler
                         </button>
                         <button className="btn-premium" onClick={handleFinalUpload}>
@@ -349,7 +586,7 @@ export default function DatabasePage() {
                         <tbody>
                           {previewData?.slice(0, 10).map((r, i) => (
                             <tr key={i}>
-                              <td className="font-bold">{r.nom}</td>
+                              <td className="font-bold" style={{ color: '#1e293b' }}>{r.nom}</td>
                               <td><span className={`grade-badge ${r.decision.toUpperCase().includes('ADM') || r.decision.toUpperCase() === 'V' ? 'grade-a' : 'grade-b'}`}>{r.decision}</span></td>
                             </tr>
                           ))}
@@ -391,13 +628,29 @@ export default function DatabasePage() {
                       g.info.academicYear.includes(searchTerm)
                     )
                     .map((group: any) => (
-                      <div key={group.id} className="stat-card" style={{ cursor: 'pointer', transition: 'all 0.2s ease' }} onClick={() => setSelectedGroup(group)} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
+                      <div key={group.id} className="stat-card" style={{ cursor: 'pointer', transition: 'all 0.2s ease', position: 'relative' }} onClick={() => setSelectedGroup(group)} onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-3px)'} onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}>
                         <FileText size={24} />
                         <div>
                           <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--primary-blue)' }}>{group.info.faculty.name}</h4>
-                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0 8px 0', fontWeight: '500' }}>{group.info.promotion.name} • {group.info.academicYear}</p>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0 8px 0', fontWeight: '500' }}>
+                            {group.info.promotion.name} • {group.info.academicYear} • <span style={{ color: 'var(--accent-cyan)' }}>{group.info.session.name}</span>
+                          </p>
                           <span className="grade-badge grade-a" style={{ background: '#f0f9fb', color: 'var(--accent-cyan)' }}>{group.students.length} étudiants archivés</span>
                         </div>
+                        <button 
+                          className="delete-icon-archive"
+                          onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (!group.info.referenceLink) return alert("Impossible de supprimer cette archive groupée (lien manquant).");
+                            setDeleteRequest({ 
+                              type: 'archiveGroup', 
+                              id: group.info.referenceLink, 
+                              name: `l'intégralité de cette session d'importation (${group.info.faculty.name})` 
+                            }); 
+                          }}
+                        >
+                          <Trash2 size={16} />
+                        </button>
                       </div>
                     ))}
                 </div>
@@ -413,7 +666,9 @@ export default function DatabasePage() {
                           </div>
                           <div>
                             <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{selectedGroup.info.faculty.name}</h2>
-                            <p style={{ margin: '4px 0 0 0', opacity: 0.8, fontSize: '0.9rem' }}>{selectedGroup.info.promotion.name} — Année {selectedGroup.info.academicYear}</p>
+                            <p style={{ margin: '4px 0 0 0', opacity: 0.7, fontSize: '0.85rem', fontWeight: 500 }}>
+                              {selectedGroup.info.promotion.name} • {selectedGroup.info.academicYear} • <span style={{ color: 'var(--accent-cyan)' }}>{selectedGroup.info.session.name}</span>
+                            </p>
                           </div>
                         </div>
                         <button onClick={() => setSelectedGroup(null)} style={{ background: 'none', border: 'none', color: 'white', cursor: 'pointer', opacity: 0.8, transition: '0.2s' }} onMouseEnter={(e) => e.currentTarget.style.opacity = '1'} onMouseLeave={(e) => e.currentTarget.style.opacity = '0.8'}>
@@ -436,7 +691,9 @@ export default function DatabasePage() {
                         <table className="grade-table">
                           <thead><tr><th>Identité de l'étudiant</th><th style={{ textAlign: 'right' }}>Décision Finale</th></tr></thead>
                           <tbody>
-                            {selectedGroup.students.map((s: any) => {
+                            {[...selectedGroup.students]
+                              .sort((a, b) => a.student.name.localeCompare(b.student.name))
+                              .map((s: any) => {
                                const d = s.decision.trim().toUpperCase();
                                const isAdmis = d === 'V' || d === 'ADM' || d === 'ADMIS' || d === 'ADMIS(E)';
                                return (
@@ -480,8 +737,14 @@ export default function DatabasePage() {
                         </button>
                       </div>
                       {faculties.map(f => (
-                        <div key={f.id} className={`m-item clickable ${selectedFacultyManage === f.id ? 'active' : ''}`} style={{ padding: '12px 16px', borderRadius: '10px', marginBottom: '8px', border: '1px solid transparent', transition: 'all 0.2s', background: selectedFacultyManage === f.id ? '#f0f9fb' : '#f8fafc', borderColor: selectedFacultyManage === f.id ? 'var(--accent-cyan)' : 'transparent', color: selectedFacultyManage === f.id ? 'var(--primary-blue)' : 'inherit', fontWeight: selectedFacultyManage === f.id ? 'bold' : 'normal' }} onClick={() => { setSelectedFacultyManage(f.id); setSelectedDeptManage(''); }}>
-                          {f.name}
+                        <div key={f.id} className={`m-item clickable ${selectedFacultyManage === f.id ? 'active' : ''}`} style={{ padding: '12px 16px', borderRadius: '10px', marginBottom: '8px', border: '1px solid transparent', transition: 'all 0.2s', background: selectedFacultyManage === f.id ? '#f0f9fb' : '#f8fafc', borderColor: selectedFacultyManage === f.id ? 'var(--accent-cyan)' : 'transparent', color: selectedFacultyManage === f.id ? 'var(--primary-blue)' : 'inherit', fontWeight: selectedFacultyManage === f.id ? 'bold' : 'normal', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => { setSelectedFacultyManage(f.id); setSelectedDeptManage(''); }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+                          <button 
+                            className="delete-small-icon"
+                            onClick={(e) => { e.stopPropagation(); setDeleteRequest({ type: 'faculty', id: f.id, name: f.name }); }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       ))}
                    </div>
@@ -499,8 +762,14 @@ export default function DatabasePage() {
                         <p className="text-sm text-muted text-center py-4">Sélectionnez une faculté</p>
                       ) : (
                         deptsForManage.map((d: any) => (
-                          <div key={d.id} className={`m-item clickable ${selectedDeptManage === d.id ? 'active' : ''}`} style={{ padding: '12px 16px', borderRadius: '10px', marginBottom: '8px', border: '1px solid transparent', transition: 'all 0.2s', background: selectedDeptManage === d.id ? '#f0f9fb' : '#f8fafc', borderColor: selectedDeptManage === d.id ? 'var(--accent-cyan)' : 'transparent', color: selectedDeptManage === d.id ? 'var(--primary-blue)' : 'inherit', fontWeight: selectedDeptManage === d.id ? 'bold' : 'normal' }} onClick={() => setSelectedDeptManage(d.id)}>
-                            {d.name}
+                          <div key={d.id} className={`m-item clickable ${selectedDeptManage === d.id ? 'active' : ''}`} style={{ padding: '12px 16px', borderRadius: '10px', marginBottom: '8px', border: '1px solid transparent', transition: 'all 0.2s', background: selectedDeptManage === d.id ? '#f0f9fb' : '#f8fafc', borderColor: selectedDeptManage === d.id ? 'var(--accent-cyan)' : 'transparent', color: selectedDeptManage === d.id ? 'var(--primary-blue)' : 'inherit', fontWeight: selectedDeptManage === d.id ? 'bold' : 'normal', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }} onClick={() => setSelectedDeptManage(d.id)}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                            <button 
+                              className="delete-small-icon"
+                              onClick={(e) => { e.stopPropagation(); setDeleteRequest({ type: 'dept', id: d.id, name: d.name }); }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         ))
                       )}
@@ -519,8 +788,14 @@ export default function DatabasePage() {
                         <p className="text-sm text-muted text-center py-4">Sélectionnez un département</p>
                       ) : (
                         promosForManage.map((p: any) => (
-                          <div key={p.id} className="m-item" style={{ padding: '12px 16px', borderRadius: '10px', marginBottom: '8px', background: '#f8fafc' }}>
-                            {p.name}
+                          <div key={p.id} className="m-item" style={{ padding: '12px 16px', borderRadius: '10px', marginBottom: '8px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                            <button 
+                              className="delete-small-icon"
+                              onClick={(e) => { e.stopPropagation(); setDeleteRequest({ type: 'promo', id: p.id, name: p.name }); }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         ))
                       )}
@@ -534,8 +809,14 @@ export default function DatabasePage() {
                         </button>
                       </div>
                       {sessions.map(s => (
-                        <div key={s.id} className="m-item" style={{ padding: '12px 16px', borderRadius: '10px', marginBottom: '8px', background: '#f8fafc' }}>
-                          {s.name}
+                        <div key={s.id} className="m-item" style={{ padding: '12px 16px', borderRadius: '10px', marginBottom: '8px', background: '#f8fafc', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                          <button 
+                            className="delete-small-icon"
+                            onClick={(e) => { e.stopPropagation(); setDeleteRequest({ type: 'session', id: s.id, name: s.name }); }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       ))}
                    </div>
@@ -551,6 +832,10 @@ export default function DatabasePage() {
         .loading-card { background: white; padding: 50px; border-radius: 24px; text-align: center; border: 1px solid #e2e8f0; }
         .m-item { cursor: pointer; }
         .clickable:hover { transform: translateX(4px); }
+        .delete-small-icon { background: none; border: none; color: #cbd5e1; cursor: pointer; transition: all 0.2s; padding: 4px; border-radius: 6px; }
+        .delete-small-icon:hover { color: #ef4444; background: #fee2e2; }
+        .delete-icon-archive { position: absolute; top: 12px; right: 12px; background: white; border: 1px solid #f1f5f9; color: #cbd5e1; padding: 6px; border-radius: 8px; cursor: pointer; transition: all 0.2s; opacity: 0; }
+        .stat-card:hover .delete-icon-archive { opacity: 1; color: #ef4444; }
       `}</style>
     </div>
   )

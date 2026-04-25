@@ -22,13 +22,13 @@ export default function Sidebar() {
         <Link href="/dashboard" className={`nav-item-link ${pathname === '/dashboard' ? 'active' : ''}`}>
           <Search size={20} /><span>Recherche</span>
         </Link>
-        <Link href="#" className="nav-item-link">
+        <Link href="/archives" className={`nav-item-link ${pathname === '/archives' ? 'active' : ''}`}>
           <FolderOpen size={20} /><span>Archives</span>
         </Link>
-        <Link href="#" className="nav-item-link">
-          <ChartBar size={20} /><span>Statistiques</span>
+        <Link href="/controle" className={`nav-item-link ${pathname === '/controle' ? 'active' : ''}`}>
+          <ChartBar size={20} /><span>Contrôle de Scolarité</span>
         </Link>
-        <Link href="#" className="nav-item-link">
+        <Link href="/students" className={`nav-item-link ${pathname === '/students' ? 'active' : ''}`}>
           <Users size={20} /><span>Étudiants</span>
         </Link>
         
