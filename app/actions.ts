@@ -134,7 +134,7 @@ export async function getArchivesTree() {
     const yearData = await Promise.all(years.map(async (year: any) => {
       const allArchives = await prisma.archive.findMany({
         where: { facultyId: faculty.id, academicYear: year },
-        include: { promotion: true, session: true, department: true, student: true },
+        include: { promotion: true, session: true, department: true },
         orderBy: [{ department: { name: 'asc' } }, { promotion: { name: 'asc' } }, { session: { name: 'asc' } }]
       })
 
@@ -166,14 +166,8 @@ export async function getArchivesTree() {
           for (const arc of promoData.sessions) {
             const sid = arc.sessionId
             if (!sessionMap.has(sid)) {
-              sessionMap.set(sid, { sessionName: arc.session.name, archives: [] })
+              sessionMap.set(sid, { sessionName: arc.session.name })
             }
-            sessionMap.get(sid)!.archives.push({
-              id: arc.id,
-              studentName: arc.student.name,
-              decision: arc.decision,
-              referenceLink: arc.referenceLink
-            })
           }
 
           return {
@@ -182,7 +176,7 @@ export async function getArchivesTree() {
             sessions: Array.from(sessionMap.entries()).map(([sid, sdata]) => ({
               id: sid,
               name: sdata.sessionName,
-              students: sdata.archives
+              students: []
             }))
           }
         })
@@ -195,6 +189,33 @@ export async function getArchivesTree() {
   }))
 
   return tree
+}
+
+export async function getArchiveSessionDetails(filters: {
+  facultyId: string,
+  year: string,
+  deptId: string | null,
+  promoId: string,
+  sessionId: string
+}) {
+  const archives = await prisma.archive.findMany({
+    where: {
+      facultyId: filters.facultyId,
+      academicYear: filters.year,
+      departmentId: filters.deptId === 'none' ? null : filters.deptId,
+      promotionId: filters.promoId,
+      sessionId: filters.sessionId
+    },
+    include: { student: true },
+    orderBy: { student: { name: 'asc' } }
+  })
+
+  return archives.map(a => ({
+    id: a.id,
+    studentName: a.student.name,
+    decision: a.decision,
+    referenceLink: a.referenceLink
+  }))
 }
 
 // --- IMPORTATION ---

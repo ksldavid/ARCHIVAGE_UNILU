@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import Sidebar from '../../components/Sidebar'
-import { getArchivesTree } from '../actions'
+import { getArchivesTree, getArchiveSessionDetails } from '../actions'
 import { FileText, ExternalLink, Calendar, Building2, Loader2, ChevronDown, FolderOpen, Search, BookOpen, GraduationCap, Folder, Layers, X, Download } from 'lucide-react'
 
 type StudentEntry = { id: string; studentName: string; decision: string; referenceLink: string | null }
@@ -25,6 +25,7 @@ export default function ArchivesPage() {
   const [previewData, setPreviewData] = useState<{
     faculty: string, promo: string, dept: string, year: string, session: string, students: StudentEntry[]
   } | null>(null)
+  const [modalLoading, setModalLoading] = useState(false)
 
   useEffect(() => {
     getArchivesTree().then(data => {
@@ -45,16 +46,32 @@ export default function ArchivesPage() {
   const totalFiles = selectedFaculty ? countFiles(selectedFaculty) : 0
   const totalDepts = selectedFaculty?.years.reduce((a, y) => a + y.departments.length, 0) ?? 0
 
-  const openPreview = (session: SessionData, promoName: string, deptName: string, year: string) => {
+  const openPreview = async (session: SessionData, promo: PromotionData, dept: DeptData, year: string) => {
+    setModalLoading(true)
     setPreviewData({
       faculty: selectedFaculty?.name || '',
-      promo: promoName,
-      dept: deptName,
+      promo: promo.name,
+      dept: dept.name,
       year: year,
       session: session.name,
-      students: session.students
+      students: []
     })
     setShowModal(true)
+
+    try {
+      const students = await getArchiveSessionDetails({
+        facultyId: selectedFaculty!.id,
+        year,
+        deptId: dept.id,
+        promoId: promo.id,
+        sessionId: session.id
+      })
+      setPreviewData(prev => prev ? { ...prev, students } : null)
+    } catch (err) {
+      console.error("Erreur chargement détails:", err)
+    } finally {
+      setModalLoading(false)
+    }
   }
 
   const exportToCSV = () => {
@@ -181,7 +198,7 @@ export default function ArchivesPage() {
                                                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', background: 'white', border: '1px solid #f1f5f9' }}>
                                                     <FileText size={15} color="#0891b2" />
                                                     <span style={{ flex: 1, fontWeight: 600, fontSize: '0.83rem', color: '#1e293b' }}>{session.name}</span>
-                                                    <button onClick={() => openPreview(session, promo.name, dept.name, yearData.year)}
+                                                    <button onClick={() => openPreview(session, promo, dept, yearData.year)}
                                                       style={{ padding: '5px 12px', borderRadius: '7px', background: 'var(--primary-blue)', color: 'white', border: 'none', fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer' }}>
                                                       Ouvrir
                                                     </button>
@@ -255,37 +272,44 @@ export default function ArchivesPage() {
               </div>
 
               <div style={{ maxHeight: '500px', overflowY: 'auto', padding: '0 32px 32px 32px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead style={{ position: 'sticky', top: 0, background: 'white', zIndex: 1 }}>
-                    <tr>
-                      <th style={{ textAlign: 'left', padding: '20px 0', fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Identité de l'étudiant</th>
-                      <th style={{ textAlign: 'right', padding: '20px 0', fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Décision Finale</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {previewData.students.map((student, idx) => (
-                      <tr key={idx} style={{ borderBottom: '1px solid #f8fafc' }}>
-                        <td style={{ padding: '14px 0' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <div style={{ width: '32px', height: '32px', background: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>
-                              {student.studentName.charAt(0)}
-                            </div>
-                            <span style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.9rem' }}>{student.studentName}</span>
-                          </div>
-                        </td>
-                        <td style={{ padding: '14px 0', textAlign: 'right' }}>
-                          <span style={{ 
-                            padding: '4px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 800,
-                            background: (student.decision.includes('ADM') || student.decision === 'V' || student.decision.includes('COMP') || student.decision.startsWith('R')) ? '#dcfce7' : (student.decision.includes('AJ') || student.decision.includes('DEF') || student.decision.includes('NV')) ? '#fee2e2' : '#fef9c3',
-                            color: (student.decision.includes('ADM') || student.decision === 'V' || student.decision.includes('COMP') || student.decision.startsWith('R')) ? '#166534' : (student.decision.includes('AJ') || student.decision.includes('DEF') || student.decision.includes('NV')) ? '#991b1b' : '#854d0e'
-                          }}>
-                            {student.decision}
-                          </span>
-                        </td>
+                {modalLoading ? (
+                  <div style={{ padding: '60px 0', textAlign: 'center' }}>
+                    <Loader2 className="animate-spin" style={{ margin: '0 auto', opacity: 0.5 }} size={32} />
+                    <p style={{ marginTop: '15px', color: '#64748b', fontSize: '0.9rem', fontWeight: 600 }}>Chargement des étudiants...</p>
+                  </div>
+                ) : (
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{ position: 'sticky', top: 0, background: 'white', zIndex: 1 }}>
+                      <tr>
+                        <th style={{ textAlign: 'left', padding: '20px 0', fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Identité de l'étudiant</th>
+                        <th style={{ textAlign: 'right', padding: '20px 0', fontSize: '0.75rem', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>Décision Finale</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {previewData.students.map((student, idx) => (
+                        <tr key={idx} style={{ borderBottom: '1px solid #f8fafc' }}>
+                          <td style={{ padding: '14px 0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                              <div style={{ width: '32px', height: '32px', background: '#f1f5f9', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.75rem', fontWeight: 700, color: '#64748b' }}>
+                                {student.studentName.charAt(0)}
+                              </div>
+                              <span style={{ fontWeight: 700, color: '#1e293b', fontSize: '0.9rem' }}>{student.studentName}</span>
+                            </div>
+                          </td>
+                          <td style={{ padding: '14px 0', textAlign: 'right' }}>
+                            <span style={{ 
+                              padding: '4px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 800,
+                              background: (student.decision.includes('ADM') || student.decision === 'V' || student.decision.includes('COMP') || student.decision.startsWith('R')) ? '#dcfce7' : (student.decision.includes('AJ') || student.decision.includes('DEF') || student.decision.includes('NV')) ? '#fee2e2' : '#fef9c3',
+                              color: (student.decision.includes('ADM') || student.decision === 'V' || student.decision.includes('COMP') || student.decision.startsWith('R')) ? '#166534' : (student.decision.includes('AJ') || student.decision.includes('DEF') || student.decision.includes('NV')) ? '#991b1b' : '#854d0e'
+                            }}>
+                              {student.decision}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
               </div>
             </div>
           </div>
