@@ -146,9 +146,12 @@ export default function DatabasePage() {
           const row = rawData[i]
           if (!row || !row[nameColIndex]) continue
           
-          const name = String(row[nameColIndex]).toUpperCase().trim()
-          // Ignorer les lignes qui ne sont pas des noms (chiffres, titres, etc.)
-          if (name.length < 3 || !/[A-Z]/.test(name) || name === 'NOM' || name === 'NOMS') continue
+          const rawName = String(row[nameColIndex])
+          const name = rawName.toUpperCase().trim()
+          const normName = normalize(rawName)
+
+          // Ignorer les lignes qui ne sont pas des noms (chiffres, titres, ou en-têtes répétés)
+          if (name.length < 3 || !/[A-Z]/.test(name) || normName === 'NOM' || normName === 'NOMS' || normName.includes('NOMSETPRENOM') || normName.includes('POSTNOM')) continue
           
           const decision = decisionColIndex !== -1 ? String(row[decisionColIndex] || '—').trim() : '—'
           

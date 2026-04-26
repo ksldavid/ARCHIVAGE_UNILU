@@ -286,7 +286,9 @@ export async function importArchives(formData: FormData) {
       // Sécurité pour les en-têtes répétés (pages multiples) :
       // Si la cellule contient "NOM" ou ressemble à l'en-tête, on l'ignore
       const normName = normalize(rawName)
-      if (name.length < 3 || !/[A-Z]/.test(name) || normName.includes('NOM')) continue
+      // On ignore si c'est trop court, si pas de lettres, ou si c'est l'en-tête (ex: "NOMS, POST-NOMS...")
+      // Un nom d'étudiant ne devrait pas être identique à l'en-tête complet
+      if (name.length < 3 || !/[A-Z]/.test(name) || normName === 'NOM' || normName === 'NOMS' || normName.includes('NOMSETPRENOM') || normName.includes('POSTNOM')) continue
       
       const decision = decisionColIndex !== -1 ? String(row[decisionColIndex] || '-').toUpperCase().trim() : '-'
       
@@ -373,7 +375,7 @@ export async function traceStudents(formData: FormData) {
         const rawVal = String(row[k])
         const name = rawVal.toUpperCase().trim()
         const normVal = normalize(rawVal)
-        if (name.length > 2 && /[A-Z]/.test(name) && !normVal.includes('NOM')) {
+        if (name.length > 2 && /[A-Z]/.test(name) && normVal !== 'NOM' && normVal !== 'NOMS' && !normVal.includes('NOMSETPRENOM') && !normVal.includes('POSTNOM')) {
           studentNamesSet.add(name)
         }
       }
@@ -481,8 +483,14 @@ export async function getPromotionStats(filters: {
   const total = archives.length
   const stats = {
     total,
-    admis: archives.filter((a: any) => a.decision.includes('ADM')).length,
-    ajournes: archives.filter((a: any) => a.decision.includes('AJ') || a.decision.includes('DÉF')).length,
+    admis: archives.filter((a: any) => {
+      const d = a.decision.toUpperCase();
+      return d.includes('ADM') || d === 'V' || d.includes('COMP') || d.startsWith('R');
+    }).length,
+    ajournes: archives.filter((a: any) => {
+      const d = a.decision.toUpperCase();
+      return d.includes('AJ') || d.includes('DEF') || d.includes('NV');
+    }).length,
     autres: 0
   }
   stats.autres = total - (stats.admis + stats.ajournes)

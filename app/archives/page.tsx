@@ -276,8 +276,8 @@ export default function ArchivesPage() {
                         <td style={{ padding: '14px 0', textAlign: 'right' }}>
                           <span style={{ 
                             padding: '4px 12px', borderRadius: '20px', fontSize: '0.75rem', fontWeight: 800,
-                            background: student.decision.includes('ADM') ? '#dcfce7' : '#fef9c3',
-                            color: student.decision.includes('ADM') ? '#166534' : '#854d0e'
+                            background: (student.decision.includes('ADM') || student.decision === 'V' || student.decision.includes('COMP') || student.decision.startsWith('R')) ? '#dcfce7' : (student.decision.includes('AJ') || student.decision.includes('DEF') || student.decision.includes('NV')) ? '#fee2e2' : '#fef9c3',
+                            color: (student.decision.includes('ADM') || student.decision === 'V' || student.decision.includes('COMP') || student.decision.startsWith('R')) ? '#166534' : (student.decision.includes('AJ') || student.decision.includes('DEF') || student.decision.includes('NV')) ? '#991b1b' : '#854d0e'
                           }}>
                             {student.decision}
                           </span>
