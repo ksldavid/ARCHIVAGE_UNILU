@@ -242,7 +242,8 @@ export async function importArchives(formData: FormData) {
   const arrayBuffer = await file.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
   
-  const fileName = file.name.split('.')[0] + '_' + Date.now()
+  const sanitizedBase = file.name.split('.')[0].normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9]/g, '_')
+  const fileName = sanitizedBase + '_' + Date.now()
   const extension = file.name.split('.').pop()
 
   const uploadResult = await new Promise<any>((resolve, reject) => {
@@ -263,31 +264,35 @@ export async function importArchives(formData: FormData) {
   
   const archiveDataToPrepare: { name: string, decision: string }[] = []
   const studentsToProcess = new Set<string>()
-  const normalize = (v: any) => String(v || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, '').trim();
+  const normalize = (v: any) => String(v || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
 
-  // On boucle sur TOUTES les feuilles du classeur
+  console.log("--- DÉBUT IMPORTATION ---")
   for (const sheetName of workbook.SheetNames) {
     const worksheet = workbook.Sheets[sheetName]
-    const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][]
+    const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '' }) as any[][]
+    
+    console.log(`Analyse de la feuille: ${sheetName} (${rawData.length} lignes)`)
     
     let nameColIndex = -1
     let decisionColIndex = -1
     let headerIndex = -1
 
-    // 1. Détection du header pour CETTE feuille
+    // 1. Détection classique par Header
     for (let i = 0; i < Math.min(rawData.length, 100); i++) {
       const row = rawData[i]
-      if (!row) continue
+      if (!row || row.length < 1) continue
       
       for (let j = 0; j < row.length; j++) {
         const cell = normalize(row[j])
-        // Détection souple : "NOM", "NOMS", "IDENTITE", etc.
-        if (cell === 'NOM' || cell === 'NOMS' || cell === 'IDENTITE' || (cell.includes('NOM') && (cell.includes('PRENOM') || cell.includes('POST') || cell.includes('COMPLET') || cell.includes('&')))) {
+        if (!cell) continue
+
+        // Détection NOM
+        if (cell === 'NOM' || cell === 'NOMS' || cell === 'IDENTITE' || cell === 'ETUDIANT' || cell.includes('NOMPRENOM') || cell.includes('NOMPOSTNOM') || (cell.includes('NOM') && cell.includes('PRENOM'))) {
           nameColIndex = j
           headerIndex = i
         }
-        // Détection de la décision (Décision, Jury, Résultat, Mention, Statut)
-        if (cell.includes('DECISION') || cell.includes('JURY') || cell === 'RESULTAT' || cell === 'MENTION' || cell === 'STATUT' || cell === 'DEC') {
+        // Détection DÉCISION
+        if (cell.includes('DECISION') || cell.includes('JURY') || cell.includes('RESULTAT') || cell.includes('MENTION') || cell.includes('STATUT') || cell === 'DEC') {
           decisionColIndex = j
           if (headerIndex === -1) headerIndex = i
         }
@@ -295,33 +300,51 @@ export async function importArchives(formData: FormData) {
       if (nameColIndex !== -1 && decisionColIndex !== -1) break
     }
 
+    // 2. Fallback: Recherche par contenu (si pas de header trouvé)
     if (nameColIndex === -1) {
-      for (let i = 0; i < Math.min(rawData.length, 60); i++) {
-         const j = rawData[i]?.findIndex((c: any) => {
-           const val = normalize(c);
-           return val === 'NOM' || val === 'NOMS' || val.includes('NOM');
-         })
-         if (j !== -1) { nameColIndex = j; headerIndex = i; break; }
+      console.log("Header non trouvé, tentative de détection par contenu...")
+      for (let i = 0; i < Math.min(rawData.length, 50); i++) {
+        const row = rawData[i]
+        if (!row) continue
+        for (let j = 0; j < row.length; j++) {
+          const val = String(row[j] || '').trim()
+          // Un nom d'étudiant a souvent au moins 2 mots, est en majuscule et fait plus de 5 caractères
+          if (val.split(' ').length >= 2 && val === val.toUpperCase() && val.length > 5 && !val.includes(':') && !val.includes('/') && !val.includes('UNIVERSITE')) {
+            console.log(`Colonne de noms potentielle trouvée à l'index ${j} (valeur: ${val})`)
+            nameColIndex = j
+            headerIndex = i - 1
+            break
+          }
+        }
+        if (nameColIndex !== -1) break
       }
     }
 
-    if (nameColIndex === -1) continue // On passe à la feuille suivante si pas de noms trouvés
+    if (nameColIndex === -1) {
+      console.log("Aucune colonne de noms trouvée dans cette feuille.")
+      continue
+    }
 
-    // 2. Extraction des données
+    console.log(`Extraction: Colonne Noms=${nameColIndex}, Colonne Décision=${decisionColIndex}, Ligne Header=${headerIndex}`)
+
+    // 3. Extraction des données
     for (let i = headerIndex + 1; i < rawData.length; i++) {
       const row = rawData[i]
-      if (!row || !row[nameColIndex]) continue
+      if (!row) continue
       
-      const rawName = String(row[nameColIndex])
-      const name = rawName.toUpperCase().trim()
-      
-      // Sécurité pour les en-têtes répétés (pages multiples) :
-      // Si la cellule contient "NOM" ou ressemble à l'en-tête, on l'ignore
+      const rawName = String(row[nameColIndex] || '').trim()
       const normName = normalize(rawName)
-      // On ignore si c'est trop court, si pas de lettres, ou si c'est l'en-tête
-      if (name.length < 3 || !/[A-Z]/.test(name) || normName === 'NOM' || normName === 'NOMS' || normName.includes('NOMSETPRENOM') || normName.includes('POSTNOM') || normName.includes('IDENTITE')) continue
       
-      const decision = decisionColIndex !== -1 ? String(row[decisionColIndex] || '-').toUpperCase().trim() : '-'
+      if (rawName.length < 3) continue
+      if (!/[A-Z]/.test(rawName.toUpperCase())) continue
+      
+      // Filtres
+      if (normName === 'NOM' || normName === 'NOMS' || normName.includes('NOMSETPRENOM') || normName.includes('IDENTITE')) continue
+      if (normName.includes('REPUBLIQUE') || normName.includes('UNIVERSITE') || normName.includes('FACULTE') || normName.includes('ANNEEACADEMIQUE')) continue
+      if (normName.includes('SIGNATURE') || normName.includes('PAGE') || normName.includes('SESSION')) continue
+
+      const name = rawName.toUpperCase()
+      const decision = (decisionColIndex !== -1 && row[decisionColIndex]) ? String(row[decisionColIndex]).toUpperCase().trim() : 'AA'
       
       if (!studentsToProcess.has(name)) {
         studentsToProcess.add(name)
@@ -329,8 +352,9 @@ export async function importArchives(formData: FormData) {
       }
     }
   }
+  console.log(`Fin de l'analyse. ${archiveDataToPrepare.length} étudiants trouvés.`)
 
-  if (archiveDataToPrepare.length === 0) throw new Error("Aucun étudiant valide trouvé dans le fichier (vérifiez toutes les feuilles).")
+  if (archiveDataToPrepare.length === 0) throw new Error("Aucun étudiant trouvé. Vérifiez que le fichier Excel contient bien une colonne avec les noms en MAJUSCULES.")
 
   // 1. Gérer les étudiants en masse
   const studentNames = Array.from(studentsToProcess)

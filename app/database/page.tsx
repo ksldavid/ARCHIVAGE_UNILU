@@ -102,62 +102,65 @@ export default function DatabasePage() {
         const rawData = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[][]
         
         // 1. Trouver la ligne d'en-tête et les indices des colonnes
+        const normalize = (v: any) => String(v || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+
         let nameColIndex = -1
         let decisionColIndex = -1
         let headerIndex = -1
 
-        const normalize = (v: any) => String(v || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, '').trim();
-
+        // 1. Détection par Header
         for (let i = 0; i < Math.min(rawData.length, 100); i++) {
           const row = rawData[i]
           if (!row) continue
-          
           for (let j = 0; j < row.length; j++) {
             const cell = normalize(row[j])
-            if (cell === 'NOM' || cell === 'NOMS' || cell === 'IDENTITE' || (cell.includes('NOM') && (cell.includes('PRENOM') || cell.includes('POST') || cell.includes('COMPLET') || cell.includes('&')))) {
-              nameColIndex = j
-              headerIndex = i
+            if (cell === 'NOM' || cell === 'NOMS' || cell === 'IDENTITE' || cell.includes('NOMPRENOM') || cell.includes('NOMPOSTNOM') || (cell.includes('NOM') && cell.includes('PRENOM'))) {
+              nameColIndex = j; headerIndex = i;
             }
-            if (cell.includes('DECISION') || cell.includes('JURY') || cell === 'RESULTAT' || cell === 'MENTION' || cell === 'STATUT' || cell === 'DEC') {
-              decisionColIndex = j
-              if (headerIndex === -1) headerIndex = i
+            if (cell.includes('DECISION') || cell.includes('JURY') || cell.includes('RESULTAT') || cell.includes('MENTION') || cell.includes('STATUT') || cell === 'DEC') {
+              decisionColIndex = j; if (headerIndex === -1) headerIndex = i;
             }
           }
           if (nameColIndex !== -1 && decisionColIndex !== -1) break
         }
 
+        // 2. Fallback par contenu
         if (nameColIndex === -1) {
-          for (let i = 0; i < Math.min(rawData.length, 60); i++) {
-             const j = rawData[i]?.findIndex(c => {
-               const val = normalize(c);
-               return val === 'NOM' || val === 'NOMS' || val === 'IDENTITE' || val.includes('NOM');
-             })
-             if (j !== -1) { nameColIndex = j; headerIndex = i; break; }
+          for (let i = 0; i < Math.min(rawData.length, 50); i++) {
+            const row = rawData[i]
+            if (!row) continue
+            for (let j = 0; j < row.length; j++) {
+              const val = String(row[j] || '').trim()
+              if (val.split(' ').length >= 2 && val === val.toUpperCase() && val.length > 5 && !val.includes(':') && !val.includes('UNIVERSITE')) {
+                nameColIndex = j; headerIndex = i - 1; break;
+              }
+            }
+            if (nameColIndex !== -1) break
           }
         }
 
         if (nameColIndex === -1) return alert("Désolé, je ne trouve pas la colonne des noms dans ce fichier.")
 
-        // 2. Extraire les données à partir de la ligne après le header
+        // 3. Extraction
         const finalRows: any[] = []
         const studentSet = new Set<string>()
 
         for (let i = headerIndex + 1; i < rawData.length; i++) {
           const row = rawData[i]
-          if (!row || !row[nameColIndex]) continue
+          if (!row) continue
           
-          const rawName = String(row[nameColIndex])
-          const name = rawName.toUpperCase().trim()
+          const rawName = String(row[nameColIndex] || '').trim()
           const normName = normalize(rawName)
 
-          // Ignorer les lignes qui ne sont pas des noms (chiffres, titres, ou en-têtes répétés)
-          if (name.length < 3 || !/[A-Z]/.test(name) || normName === 'NOM' || normName === 'NOMS' || normName.includes('NOMSETPRENOM') || normName.includes('POSTNOM') || normName.includes('IDENTITE')) continue
+          if (rawName.length < 3 || !/[A-Z]/.test(rawName.toUpperCase())) continue
+          if (normName === 'NOM' || normName === 'NOMS' || normName.includes('NOMSETPRENOM') || normName.includes('IDENTITE')) continue
+          if (normName.includes('REPUBLIQUE') || normName.includes('UNIVERSITE') || normName.includes('FACULTE') || normName.includes('ANNEEACADEMIQUE')) continue
           
-          const decision = decisionColIndex !== -1 ? String(row[decisionColIndex] || '—').trim() : '—'
+          const decision = (decisionColIndex !== -1 && row[decisionColIndex]) ? String(row[decisionColIndex]).toUpperCase().trim() : 'AA'
           
-          if (!studentSet.has(name)) {
-            studentSet.add(name)
-            finalRows.push({ nom: name, decision: decision.toUpperCase() })
+          if (!studentSet.has(rawName.toUpperCase())) {
+            studentSet.add(rawName.toUpperCase())
+            finalRows.push({ nom: rawName.toUpperCase(), decision })
           }
         }
 
@@ -590,6 +593,23 @@ export default function DatabasePage() {
                         </button>
                       </div>
                     </div>
+                    
+                    {/* RÉSUMÉ DES CLASSIFICATIONS */}
+                    <div className="flex flex-wrap gap-3 mb-6 p-4" style={{ background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9' }}>
+                      {[
+                        { label: 'Faculté', value: faculties.find(f => f.id === selectedFaculty)?.name },
+                        { label: 'Département', value: deptsForImport.find((d: any) => d.id === selectedDept)?.name || 'N/A' },
+                        { label: 'Promotion', value: promosForImport.find((p: any) => p.id === selectedPromo)?.name },
+                        { label: 'Session', value: sessions.find(s => s.id === selectedSession)?.name },
+                        { label: 'Année', value: academicYear }
+                      ].map((item, idx) => (
+                        <div key={idx} style={{ flex: '1 1 180px', minWidth: '150px' }}>
+                          <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', display: 'block', marginBottom: '2px' }}>{item.label}</span>
+                          <span style={{ fontSize: '0.85rem', fontWeight: 700, color: '#475569' }}>{item.value || '—'}</span>
+                        </div>
+                      ))}
+                    </div>
+
                     <div style={{ background: '#fcfdfd', borderRadius: '16px', border: '1px solid #f1f5f9', overflow: 'hidden' }}>
                       <table className="grade-table">
                         <thead><tr><th>Nom complet de l'étudiant</th><th>Décision du Jury</th></tr></thead>
@@ -597,7 +617,10 @@ export default function DatabasePage() {
                           {previewData?.slice(0, 10).map((r, i) => (
                             <tr key={i}>
                               <td className="font-bold" style={{ color: '#1e293b' }}>{r.nom}</td>
-                              <td><span className={`grade-badge ${r.decision.toUpperCase().includes('ADM') || r.decision.toUpperCase() === 'V' ? 'grade-a' : 'grade-b'}`}>{r.decision}</span></td>
+                              <td><span className={`grade-badge ${
+                                ['AA', 'ADM', 'V', 'COMP', 'S', 'A', 'ADS'].some(code => r.decision.toUpperCase().includes(code)) || r.decision.toUpperCase().startsWith('R') 
+                                ? 'grade-a' : 'grade-b'
+                              }`}>{r.decision}</span></td>
                             </tr>
                           ))}
                         </tbody>
