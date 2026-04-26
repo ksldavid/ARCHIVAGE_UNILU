@@ -287,7 +287,7 @@ export async function importArchives(formData: FormData) {
         if (!cell) continue
 
         // Détection NOM
-        if (cell === 'NOM' || cell === 'NOMS' || cell === 'IDENTITE' || cell === 'ETUDIANT' || cell.includes('NOMPRENOM') || cell.includes('NOMPOSTNOM') || (cell.includes('NOM') && cell.includes('PRENOM'))) {
+        if (cell === 'NOM' || cell === 'NOMS' || cell === 'IDENTITE' || cell === 'ETUDIANT' || cell.includes('NOMPRENOM') || (cell.includes('NOM') && cell.includes('POST')) || (cell.includes('NOM') && cell.includes('PRENOM'))) {
           nameColIndex = j
           headerIndex = i
         }
@@ -308,8 +308,10 @@ export async function importArchives(formData: FormData) {
         if (!row) continue
         for (let j = 0; j < row.length; j++) {
           const val = String(row[j] || '').trim()
+          const normVal = normalize(val)
           // Un nom d'étudiant a souvent au moins 2 mots, est en majuscule et fait plus de 5 caractères
-          if (val.split(' ').length >= 2 && val === val.toUpperCase() && val.length > 5 && !val.includes(':') && !val.includes('/') && !val.includes('UNIVERSITE')) {
+          const isBlacklisted = normVal.includes('TOTAL') || normVal.includes('COURS') || normVal.includes('MOYENNE') || normVal.includes('POURCENTAGE') || normVal.includes('DROIT') || normVal.includes('CREDIT');
+          if (val.split(' ').length >= 2 && val === val.toUpperCase() && val.length > 5 && !val.includes(':') && !val.includes('/') && !val.includes('UNIVERSITE') && !isBlacklisted) {
             console.log(`Colonne de noms potentielle trouvée à l'index ${j} (valeur: ${val})`)
             nameColIndex = j
             headerIndex = i - 1

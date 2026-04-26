@@ -114,7 +114,7 @@ export default function DatabasePage() {
           if (!row) continue
           for (let j = 0; j < row.length; j++) {
             const cell = normalize(row[j])
-            if (cell === 'NOM' || cell === 'NOMS' || cell === 'IDENTITE' || cell.includes('NOMPRENOM') || cell.includes('NOMPOSTNOM') || (cell.includes('NOM') && cell.includes('PRENOM'))) {
+            if (cell === 'NOM' || cell === 'NOMS' || cell === 'IDENTITE' || cell.includes('NOMPRENOM') || (cell.includes('NOM') && cell.includes('POST')) || (cell.includes('NOM') && cell.includes('PRENOM'))) {
               nameColIndex = j; headerIndex = i;
             }
             if (cell.includes('DECISION') || cell.includes('JURY') || cell.includes('RESULTAT') || cell.includes('MENTION') || cell.includes('STATUT') || cell === 'DEC') {
@@ -131,7 +131,9 @@ export default function DatabasePage() {
             if (!row) continue
             for (let j = 0; j < row.length; j++) {
               const val = String(row[j] || '').trim()
-              if (val.split(' ').length >= 2 && val === val.toUpperCase() && val.length > 5 && !val.includes(':') && !val.includes('UNIVERSITE')) {
+              const normVal = normalize(val)
+              const isBlacklisted = normVal.includes('TOTAL') || normVal.includes('COURS') || normVal.includes('MOYENNE') || normVal.includes('POURCENTAGE') || normVal.includes('DROIT') || normVal.includes('CREDIT');
+              if (val.split(' ').length >= 2 && val === val.toUpperCase() && val.length > 5 && !val.includes(':') && !val.includes('UNIVERSITE') && !isBlacklisted) {
                 nameColIndex = j; headerIndex = i - 1; break;
               }
             }
