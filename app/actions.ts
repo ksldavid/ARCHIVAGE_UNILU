@@ -251,11 +251,13 @@ export async function importArchives(formData: FormData) {
       
       for (let j = 0; j < row.length; j++) {
         const cell = normalize(row[j])
-        if (cell === 'NOM' || cell === 'NOMS' || (cell.includes('NOM') && (cell.includes('PRENOM') || cell.includes('POST') || cell.includes('COMPLET')))) {
+        // Détection souple : "NOM", "NOMS", "IDENTITE", etc.
+        if (cell === 'NOM' || cell === 'NOMS' || cell === 'IDENTITE' || (cell.includes('NOM') && (cell.includes('PRENOM') || cell.includes('POST') || cell.includes('COMPLET') || cell.includes('&')))) {
           nameColIndex = j
           headerIndex = i
         }
-        if (cell.includes('DECISION') || cell.includes('JURY') || cell === 'RESULTAT') {
+        // Détection de la décision (Décision, Jury, Résultat, Mention, Statut)
+        if (cell.includes('DECISION') || cell.includes('JURY') || cell === 'RESULTAT' || cell === 'MENTION' || cell === 'STATUT' || cell === 'DEC') {
           decisionColIndex = j
           if (headerIndex === -1) headerIndex = i
         }
@@ -286,9 +288,8 @@ export async function importArchives(formData: FormData) {
       // Sécurité pour les en-têtes répétés (pages multiples) :
       // Si la cellule contient "NOM" ou ressemble à l'en-tête, on l'ignore
       const normName = normalize(rawName)
-      // On ignore si c'est trop court, si pas de lettres, ou si c'est l'en-tête (ex: "NOMS, POST-NOMS...")
-      // Un nom d'étudiant ne devrait pas être identique à l'en-tête complet
-      if (name.length < 3 || !/[A-Z]/.test(name) || normName === 'NOM' || normName === 'NOMS' || normName.includes('NOMSETPRENOM') || normName.includes('POSTNOM')) continue
+      // On ignore si c'est trop court, si pas de lettres, ou si c'est l'en-tête
+      if (name.length < 3 || !/[A-Z]/.test(name) || normName === 'NOM' || normName === 'NOMS' || normName.includes('NOMSETPRENOM') || normName.includes('POSTNOM') || normName.includes('IDENTITE')) continue
       
       const decision = decisionColIndex !== -1 ? String(row[decisionColIndex] || '-').toUpperCase().trim() : '-'
       

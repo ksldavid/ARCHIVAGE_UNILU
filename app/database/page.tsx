@@ -114,11 +114,11 @@ export default function DatabasePage() {
           
           for (let j = 0; j < row.length; j++) {
             const cell = normalize(row[j])
-            if (cell === 'NOM' || cell === 'NOMS' || (cell.includes('NOM') && (cell.includes('PRENOM') || cell.includes('POST') || cell.includes('COMPLET')))) {
+            if (cell === 'NOM' || cell === 'NOMS' || cell === 'IDENTITE' || (cell.includes('NOM') && (cell.includes('PRENOM') || cell.includes('POST') || cell.includes('COMPLET') || cell.includes('&')))) {
               nameColIndex = j
               headerIndex = i
             }
-            if (cell.includes('DECISION') || cell.includes('JURY') || cell === 'RESULTAT') {
+            if (cell.includes('DECISION') || cell.includes('JURY') || cell === 'RESULTAT' || cell === 'MENTION' || cell === 'STATUT' || cell === 'DEC') {
               decisionColIndex = j
               if (headerIndex === -1) headerIndex = i
             }
@@ -130,7 +130,7 @@ export default function DatabasePage() {
           for (let i = 0; i < Math.min(rawData.length, 60); i++) {
              const j = rawData[i]?.findIndex(c => {
                const val = normalize(c);
-               return val === 'NOM' || val === 'NOMS' || val.includes('NOM');
+               return val === 'NOM' || val === 'NOMS' || val === 'IDENTITE' || val.includes('NOM');
              })
              if (j !== -1) { nameColIndex = j; headerIndex = i; break; }
           }
@@ -151,7 +151,7 @@ export default function DatabasePage() {
           const normName = normalize(rawName)
 
           // Ignorer les lignes qui ne sont pas des noms (chiffres, titres, ou en-têtes répétés)
-          if (name.length < 3 || !/[A-Z]/.test(name) || normName === 'NOM' || normName === 'NOMS' || normName.includes('NOMSETPRENOM') || normName.includes('POSTNOM')) continue
+          if (name.length < 3 || !/[A-Z]/.test(name) || normName === 'NOM' || normName === 'NOMS' || normName.includes('NOMSETPRENOM') || normName.includes('POSTNOM') || normName.includes('IDENTITE')) continue
           
           const decision = decisionColIndex !== -1 ? String(row[decisionColIndex] || '—').trim() : '—'
           
@@ -643,6 +643,9 @@ export default function DatabasePage() {
                         <div>
                           <h4 style={{ margin: 0, fontSize: '1rem', color: 'var(--primary-blue)' }}>{group.info.faculty.name}</h4>
                           <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '4px 0 8px 0', fontWeight: '500' }}>
+                            {group.info.department?.name && group.info.department.name !== 'NON APPLICABLE' && (
+                              <span style={{ color: 'var(--primary-blue)', fontWeight: 700 }}>{group.info.department.name} • </span>
+                            )}
                             {group.info.promotion.name} • {group.info.academicYear} • <span style={{ color: 'var(--accent-cyan)' }}>{group.info.session.name}</span>
                           </p>
                           <span className="grade-badge grade-a" style={{ background: '#f0f9fb', color: 'var(--accent-cyan)' }}>{group.students.length} étudiants archivés</span>
@@ -677,6 +680,9 @@ export default function DatabasePage() {
                           <div>
                             <h2 style={{ margin: 0, fontSize: '1.4rem' }}>{selectedGroup.info.faculty.name}</h2>
                             <p style={{ margin: '4px 0 0 0', opacity: 0.7, fontSize: '0.85rem', fontWeight: 500 }}>
+                              {selectedGroup.info.department?.name && selectedGroup.info.department.name !== 'NON APPLICABLE' && (
+                                <span>{selectedGroup.info.department.name} • </span>
+                              )}
                               {selectedGroup.info.promotion.name} • {selectedGroup.info.academicYear} • <span style={{ color: 'var(--accent-cyan)' }}>{selectedGroup.info.session.name}</span>
                             </p>
                           </div>
