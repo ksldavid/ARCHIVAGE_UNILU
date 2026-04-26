@@ -12,8 +12,8 @@ export default function Sidebar() {
   const pathname = usePathname()
 
   return (
-    <aside className="sidebar">
-      <div className="brand-section">
+    <aside className="sidebar" suppressHydrationWarning>
+      <div className="brand-section" suppressHydrationWarning>
         <img src="/Logo-unilu.webp" alt="Logo UNILU" className="brand-logo-small" />
         <h2>UNILU Archives</h2>
       </div>
@@ -32,7 +32,7 @@ export default function Sidebar() {
           <Users size={20} /><span>Étudiants</span>
         </Link>
         
-        <div className="nav-divider"></div>
+        <div className="nav-divider" suppressHydrationWarning></div>
         
         <Link href="/database" className={`nav-item-link ${pathname === '/database' ? 'active' : ''} nav-item-special`}>
           <Database size={20} />
@@ -40,7 +40,7 @@ export default function Sidebar() {
         </Link>
       </nav>
 
-      <div className="sidebar-footer" style={{ paddingTop: '20px', borderTop: '1px solid #f1f5f9' }}>
+      <div className="sidebar-footer" style={{ paddingTop: '20px', borderTop: '1px solid #f1f5f9' }} suppressHydrationWarning>
         <Link href="#" className="nav-item-link">
           <Settings size={20} /><span>Paramètres</span>
         </Link>

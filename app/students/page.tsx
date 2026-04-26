@@ -59,7 +59,7 @@ export default function StudentsPage() {
   }
 
   return (
-    <div className="dashboard-wrapper">
+    <div className="dashboard-wrapper" suppressHydrationWarning>
       <Sidebar />
       <main className="main-content" style={{ padding: '30px 40px' }}>
         <header style={{ marginBottom: '30px' }}>

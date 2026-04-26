@@ -230,64 +230,74 @@ export async function importArchives(formData: FormData) {
   })
 
   const workbook = XLSX.read(buffer, { type: 'buffer' })
-  const sheetName = workbook.SheetNames[0]
-  const worksheet = workbook.Sheets[sheetName]
   
-  // --- SCAN INTELLIGENT (MÊME LOGIQUE QUE LE FRONTEND) ---
-  const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][]
-  
-  let nameColIndex = -1
-  let decisionColIndex = -1
-  let headerIndex = -1
-
-  const cleanStr = (v: any) => String(v || '').toUpperCase().replace(/\s+/g, '').trim()
-
-  for (let i = 0; i < Math.min(rawData.length, 60); i++) {
-    const row = rawData[i]
-    if (!row) continue
-    
-    for (let j = 0; j < row.length; j++) {
-      const cell = cleanStr(row[j])
-      if (cell.includes('NOM') && (cell.includes('PRENOM') || cell.includes('POST') || cell.includes('COMPLET'))) {
-        nameColIndex = j
-        headerIndex = i
-      }
-      if (cell.includes('DECISION') || cell.includes('JURY')) {
-        decisionColIndex = j
-        if (headerIndex === -1) headerIndex = i
-      }
-    }
-    if (nameColIndex !== -1 && decisionColIndex !== -1) break
-  }
-
-  if (nameColIndex === -1) {
-    for (let i = 0; i < Math.min(rawData.length, 40); i++) {
-       const j = rawData[i]?.findIndex((c: any) => cleanStr(c).includes('NOM'))
-       if (j !== -1) { nameColIndex = j; headerIndex = i; break; }
-    }
-  }
-
-  if (nameColIndex === -1) throw new Error("Colonne des noms non trouvée dans le fichier.")
-
-  // --- TRAITEMENT PAR LOT (BULK) ---
-  const studentsToProcess = new Set<string>()
   const archiveDataToPrepare: { name: string, decision: string }[] = []
+  const studentsToProcess = new Set<string>()
+  const normalize = (v: any) => String(v || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, '').trim();
 
-  for (let i = headerIndex + 1; i < rawData.length; i++) {
-    const row = rawData[i]
-    if (!row || !row[nameColIndex]) continue
+  // On boucle sur TOUTES les feuilles du classeur
+  for (const sheetName of workbook.SheetNames) {
+    const worksheet = workbook.Sheets[sheetName]
+    const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][]
     
-    const name = String(row[nameColIndex]).toUpperCase().trim()
-    // Filtre de sécurité : doit avoir au moins 3 caractères et des lettres
-    if (name.length < 3 || !/[A-Z]/.test(name) || name === 'NOM') continue
-    
-    const decision = decisionColIndex !== -1 ? String(row[decisionColIndex] || '-').toUpperCase().trim() : '-'
-    
-    studentsToProcess.add(name)
-    archiveDataToPrepare.push({ name, decision })
+    let nameColIndex = -1
+    let decisionColIndex = -1
+    let headerIndex = -1
+
+    // 1. Détection du header pour CETTE feuille
+    for (let i = 0; i < Math.min(rawData.length, 100); i++) {
+      const row = rawData[i]
+      if (!row) continue
+      
+      for (let j = 0; j < row.length; j++) {
+        const cell = normalize(row[j])
+        if (cell === 'NOM' || cell === 'NOMS' || (cell.includes('NOM') && (cell.includes('PRENOM') || cell.includes('POST') || cell.includes('COMPLET')))) {
+          nameColIndex = j
+          headerIndex = i
+        }
+        if (cell.includes('DECISION') || cell.includes('JURY') || cell === 'RESULTAT') {
+          decisionColIndex = j
+          if (headerIndex === -1) headerIndex = i
+        }
+      }
+      if (nameColIndex !== -1 && decisionColIndex !== -1) break
+    }
+
+    if (nameColIndex === -1) {
+      for (let i = 0; i < Math.min(rawData.length, 60); i++) {
+         const j = rawData[i]?.findIndex((c: any) => {
+           const val = normalize(c);
+           return val === 'NOM' || val === 'NOMS' || val.includes('NOM');
+         })
+         if (j !== -1) { nameColIndex = j; headerIndex = i; break; }
+      }
+    }
+
+    if (nameColIndex === -1) continue // On passe à la feuille suivante si pas de noms trouvés
+
+    // 2. Extraction des données
+    for (let i = headerIndex + 1; i < rawData.length; i++) {
+      const row = rawData[i]
+      if (!row || !row[nameColIndex]) continue
+      
+      const rawName = String(row[nameColIndex])
+      const name = rawName.toUpperCase().trim()
+      
+      // Sécurité pour les en-têtes répétés (pages multiples) :
+      // Si la cellule contient "NOM" ou ressemble à l'en-tête, on l'ignore
+      const normName = normalize(rawName)
+      if (name.length < 3 || !/[A-Z]/.test(name) || normName.includes('NOM')) continue
+      
+      const decision = decisionColIndex !== -1 ? String(row[decisionColIndex] || '-').toUpperCase().trim() : '-'
+      
+      if (!studentsToProcess.has(name)) {
+        studentsToProcess.add(name)
+        archiveDataToPrepare.push({ name, decision })
+      }
+    }
   }
 
-  if (archiveDataToPrepare.length === 0) throw new Error("Aucun étudiant valide trouvé dans le fichier.")
+  if (archiveDataToPrepare.length === 0) throw new Error("Aucun étudiant valide trouvé dans le fichier (vérifiez toutes les feuilles).")
 
   // 1. Gérer les étudiants en masse
   const studentNames = Array.from(studentsToProcess)
@@ -333,17 +343,44 @@ export async function traceStudents(formData: FormData) {
   const arrayBuffer = await file.arrayBuffer()
   const buffer = Buffer.from(arrayBuffer)
   const workbook = XLSX.read(buffer, { type: 'buffer' })
-  const worksheet = workbook.Sheets[workbook.SheetNames[0]]
-  const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][]
-  let headerIndex = 0
-  for (let i = 0; i < Math.min(rawRows.length, 25); i++) {
-    if (rawRows[i]?.some((c: any) => String(c).toUpperCase().includes('NOM'))) { headerIndex = i; break }
+  const studentNamesSet = new Set<string>()
+  const normalize = (v: any) => String(v || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, '').trim();
+
+  for (const sheetName of workbook.SheetNames) {
+    const worksheet = workbook.Sheets[sheetName]
+    const rawRows = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as any[][]
+    
+    let headerIndex = -1
+    for (let i = 0; i < Math.min(rawRows.length, 50); i++) {
+      if (rawRows[i]?.some((c: any) => {
+        const val = normalize(c);
+        return val === 'NOM' || val === 'NOMS' || val.includes('NOM');
+      })) { 
+        headerIndex = i; 
+        break; 
+      }
+    }
+
+    if (headerIndex === -1) continue
+
+    const data = XLSX.utils.sheet_to_json(worksheet, { range: headerIndex }) as any[]
+    data.forEach((row: any) => {
+      const k = Object.keys(row).find((key: any) => {
+        const val = normalize(key);
+        return val === 'NOM' || val === 'NOMS' || val.includes('NOM');
+      })
+      if (k) {
+        const rawVal = String(row[k])
+        const name = rawVal.toUpperCase().trim()
+        const normVal = normalize(rawVal)
+        if (name.length > 2 && /[A-Z]/.test(name) && !normVal.includes('NOM')) {
+          studentNamesSet.add(name)
+        }
+      }
+    })
   }
-  const data = XLSX.utils.sheet_to_json(worksheet, { range: headerIndex }) as any[]
-  const studentNames = data.map((row: any) => {
-    const k = Object.keys(row).find((k: any) => k.toUpperCase().includes('NOM'))
-    return k ? String(row[k]).toUpperCase().trim() : null
-  }).filter(Boolean) as string[]
+
+  const studentNames = Array.from(studentNamesSet)
 
   // 2. Définir la plage d'années
   const start = parseInt(startYear.split('-')[0])

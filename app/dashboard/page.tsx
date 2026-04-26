@@ -81,7 +81,7 @@ export default function MainDashboard() {
   const promotions = departments.find((d: any) => d.id === selectedDeptId)?.promotions || []
 
   return (
-    <div className="dashboard-wrapper">
+    <div className="dashboard-wrapper" suppressHydrationWarning>
       <Sidebar />
 
       <main className="main-content" style={{ padding: '30px 20px', maxWidth: '1600px', margin: '0 auto' }}>

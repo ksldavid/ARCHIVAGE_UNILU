@@ -72,7 +72,7 @@ export default function ArchivesPage() {
   const filteredFaculties = tree.filter(f => f.name.toLowerCase().includes(search.toLowerCase()))
 
   return (
-    <div className="dashboard-wrapper">
+    <div className="dashboard-wrapper" suppressHydrationWarning>
       <Sidebar />
       <main className="main-content" style={{ padding: '30px 40px' }}>
         <div style={{ marginBottom: '28px' }}>

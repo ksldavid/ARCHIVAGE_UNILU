@@ -106,19 +106,19 @@ export default function DatabasePage() {
         let decisionColIndex = -1
         let headerIndex = -1
 
-        const cleanStr = (v: any) => String(v || '').toUpperCase().replace(/\s+/g, '').trim()
+        const normalize = (v: any) => String(v || '').normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, '').trim();
 
-        for (let i = 0; i < Math.min(rawData.length, 60); i++) {
+        for (let i = 0; i < Math.min(rawData.length, 100); i++) {
           const row = rawData[i]
           if (!row) continue
           
           for (let j = 0; j < row.length; j++) {
-            const cell = cleanStr(row[j])
-            if (cell.includes('NOM') && (cell.includes('PRENOM') || cell.includes('POST') || cell.includes('COMPLET'))) {
+            const cell = normalize(row[j])
+            if (cell === 'NOM' || cell === 'NOMS' || (cell.includes('NOM') && (cell.includes('PRENOM') || cell.includes('POST') || cell.includes('COMPLET')))) {
               nameColIndex = j
               headerIndex = i
             }
-            if (cell.includes('DECISION') || cell.includes('JURY')) {
+            if (cell.includes('DECISION') || cell.includes('JURY') || cell === 'RESULTAT') {
               decisionColIndex = j
               if (headerIndex === -1) headerIndex = i
             }
@@ -127,9 +127,11 @@ export default function DatabasePage() {
         }
 
         if (nameColIndex === -1) {
-          // Si on n'a pas trouvé de header explicite, on cherche juste une colonne qui a "NOM"
-          for (let i = 0; i < Math.min(rawData.length, 40); i++) {
-             const j = rawData[i]?.findIndex(c => cleanStr(c).includes('NOM'))
+          for (let i = 0; i < Math.min(rawData.length, 60); i++) {
+             const j = rawData[i]?.findIndex(c => {
+               const val = normalize(c);
+               return val === 'NOM' || val === 'NOMS' || val.includes('NOM');
+             })
              if (j !== -1) { nameColIndex = j; headerIndex = i; break; }
           }
         }
@@ -138,17 +140,22 @@ export default function DatabasePage() {
 
         // 2. Extraire les données à partir de la ligne après le header
         const finalRows: any[] = []
+        const studentSet = new Set<string>()
+
         for (let i = headerIndex + 1; i < rawData.length; i++) {
           const row = rawData[i]
           if (!row || !row[nameColIndex]) continue
           
-          const name = String(row[nameColIndex]).trim()
+          const name = String(row[nameColIndex]).toUpperCase().trim()
           // Ignorer les lignes qui ne sont pas des noms (chiffres, titres, etc.)
-          if (name.length < 3 || !/[a-zA-Z]/.test(name) || name.toUpperCase() === 'NOM') continue
+          if (name.length < 3 || !/[A-Z]/.test(name) || name === 'NOM' || name === 'NOMS') continue
           
           const decision = decisionColIndex !== -1 ? String(row[decisionColIndex] || '—').trim() : '—'
           
-          finalRows.push({ nom: name.toUpperCase(), decision: decision.toUpperCase() })
+          if (!studentSet.has(name)) {
+            studentSet.add(name)
+            finalRows.push({ nom: name, decision: decision.toUpperCase() })
+          }
         }
 
         if (finalRows.length === 0) return alert("Aucune donnée d'étudiant trouvée.")
@@ -279,7 +286,7 @@ export default function DatabasePage() {
   const promosForManage = deptsForManage.find((d: any) => d.id === selectedDeptManage)?.promotions || []
 
   return (
-    <div className="dashboard-wrapper">
+    <div className="dashboard-wrapper" suppressHydrationWarning>
       <Sidebar />
 
       <main className="main-content">
