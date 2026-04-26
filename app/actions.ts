@@ -132,29 +132,50 @@ export async function getArchivesTree() {
     const years = [...new Set(faculty.archives.map((a: any) => a.academicYear))].sort().reverse()
 
     const yearData = await Promise.all(years.map(async (year: any) => {
-      const allArchives = await prisma.archive.findMany({
+      // On récupère uniquement les combinaisons uniques (structure)
+      const uniqueSessions = await prisma.archive.findMany({
         where: { facultyId: faculty.id, academicYear: year },
-        include: { promotion: true, session: true, department: true },
+        select: {
+          departmentId: true,
+          department: { select: { name: true } },
+          promotionId: true,
+          promotion: { select: { name: true } },
+          sessionId: true,
+          session: { select: { name: true } },
+          referenceLink: true
+        },
+        distinct: ['departmentId', 'promotionId', 'sessionId'],
         orderBy: [{ department: { name: 'asc' } }, { promotion: { name: 'asc' } }, { session: { name: 'asc' } }]
       })
 
       // Grouper par département
-      const deptMap = new Map<string, { deptName: string; promotions: Map<string, { promoName: string; sessions: typeof allArchives }> }>()
+      const deptMap = new Map<string, { deptName: string; promotions: Map<string, { promoName: string; sessions: any[] }> }>()
 
-      for (const archive of allArchives) {
-        const deptKey = archive.departmentId ?? 'none'
-        const deptName = archive.department?.name ?? 'Général'
+      for (const item of uniqueSessions) {
+        const deptKey = item.departmentId ?? 'none'
+        const deptName = item.department?.name ?? 'Général'
 
         if (!deptMap.has(deptKey)) {
           deptMap.set(deptKey, { deptName, promotions: new Map() })
         }
 
         const dept = deptMap.get(deptKey)!
-        const pid = archive.promotionId
+        const pid = item.promotionId
         if (!dept.promotions.has(pid)) {
-          dept.promotions.set(pid, { promoName: archive.promotion.name, sessions: [] })
+          dept.promotions.set(pid, { promoName: item.promotion.name, sessions: [] })
         }
-        dept.promotions.get(pid)!.sessions.push(archive)
+        
+        // On ne met que les infos de base pour la structure
+        dept.promotions.get(pid)!.sessions.push({
+          id: item.sessionId,
+          sessionId: item.sessionId,
+          session: item.session,
+          referenceLink: item.referenceLink,
+          facultyId: faculty.id,
+          academicYear: year,
+          departmentId: item.departmentId,
+          promotionId: item.promotionId
+        })
       }
 
       const departments = Array.from(deptMap.entries()).map((entry: any) => {

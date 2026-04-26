@@ -6,7 +6,7 @@ import { getArchivesTree, getArchiveSessionDetails } from '../actions'
 import { FileText, ExternalLink, Calendar, Building2, Loader2, ChevronDown, FolderOpen, Search, BookOpen, GraduationCap, Folder, Layers, X, Download } from 'lucide-react'
 
 type StudentEntry = { id: string; studentName: string; decision: string; referenceLink: string | null }
-type SessionData = { id: string; name: string; students: StudentEntry[] }
+type SessionData = { id: string; sessionId: string; session: { name: string }; referenceLink: string | null; facultyId: string; academicYear: string; departmentId: string | null; promotionId: string }
 type PromotionData = { id: string; name: string; sessions: SessionData[] }
 type DeptData = { id: string; name: string; promotions: PromotionData[] }
 type YearData = { year: string; departments: DeptData[] }
@@ -53,8 +53,10 @@ export default function ArchivesPage() {
       promo: promo.name,
       dept: dept.name,
       year: year,
-      session: session.name,
-      students: []
+      session: session.session.name,
+      students: [],
+      // @ts-ignore
+      link: session.referenceLink
     })
     setShowModal(true)
 
@@ -197,7 +199,7 @@ export default function ArchivesPage() {
                                                 {promo.sessions.map((session, i) => (
                                                   <div key={i} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', borderRadius: '8px', background: 'white', border: '1px solid #f1f5f9' }}>
                                                     <FileText size={15} color="#0891b2" />
-                                                    <span style={{ flex: 1, fontWeight: 600, fontSize: '0.83rem', color: '#1e293b' }}>{session.name}</span>
+                                                    <span style={{ flex: 1, fontWeight: 600, fontSize: '0.83rem', color: '#1e293b' }}>{session.session.name}</span>
                                                     <button onClick={() => openPreview(session, promo, dept, yearData.year)}
                                                       style={{ padding: '5px 12px', borderRadius: '7px', background: 'var(--primary-blue)', color: 'white', border: 'none', fontSize: '0.76rem', fontWeight: 600, cursor: 'pointer' }}>
                                                       Ouvrir
@@ -252,9 +254,9 @@ export default function ArchivesPage() {
                   <span style={{ color: '#64748b', fontWeight: 500 }}>Fiche des résultats - Session: <strong style={{ color: '#0a4a5c' }}>{previewData.session}</strong></span>
                 </div>
                 <div style={{ display: 'flex', gap: '10px' }}>
-                  {previewData.students[0]?.referenceLink && (
+                  {(previewData as any).link && (
                     <a 
-                      href={`/api/download?url=${encodeURIComponent(previewData.students[0].referenceLink)}&name=${encodeURIComponent(previewData.promo + '_' + previewData.session)}`}
+                      href={`/api/download?url=${encodeURIComponent((previewData as any).link)}&name=${encodeURIComponent(previewData.promo + '_' + previewData.session)}`}
                       style={{ 
                         display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 18px', 
                         background: 'white', color: '#0a4a5c', border: '1px solid #0a4a5c', 
