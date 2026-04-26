@@ -157,10 +157,13 @@ export async function getArchivesTree() {
         dept.promotions.get(pid)!.sessions.push(archive)
       }
 
-      const departments = Array.from(deptMap.entries()).map(([deptId, deptData]: [any, any]) => ({
-        id: deptId,
-        name: deptData.deptName,
-        promotions: Array.from(deptData.promotions.entries()).map(([promoId, promoData]: [any, any]) => {
+      const departments = Array.from(deptMap.entries()).map((entry: any) => {
+        const [deptId, deptData] = entry
+        return {
+          id: deptId,
+          name: deptData.deptName,
+        promotions: Array.from(deptData.promotions.entries()).map((promoEntry: any) => {
+          const [promoId, promoData] = promoEntry
 
           // Grouper les sessions à l'intérieur de la promotion
           const sessionMap = new Map<string, { sessionName: string }>()
@@ -174,14 +177,18 @@ export async function getArchivesTree() {
           return {
             id: promoId,
             name: promoData.promoName,
-            sessions: Array.from(sessionMap.entries()).map(([sid, sdata]: [any, any]) => ({
-              id: sid,
-              name: sdata.sessionName,
-              students: []
-            }))
+            sessions: Array.from(sessionMap.entries()).map((sessionEntry: any) => {
+              const [sid, sdata] = sessionEntry
+              return {
+                id: sid,
+                name: sdata.sessionName,
+                students: []
+              }
+            })
           }
         })
-      }))
+      }
+    })
 
       return { year, departments }
     }))
