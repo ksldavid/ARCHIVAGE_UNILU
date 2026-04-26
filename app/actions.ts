@@ -162,7 +162,7 @@ export async function getArchivesTree() {
         name: deptData.deptName,
         promotions: Array.from(deptData.promotions.entries()).map(([promoId, promoData]) => {
           // Grouper les sessions à l'intérieur de la promotion
-          const sessionMap = new Map<string, { sessionName: string; archives: any[] }>()
+          const sessionMap = new Map<string, { sessionName: string }>()
           for (const arc of promoData.sessions) {
             const sid = arc.sessionId
             if (!sessionMap.has(sid)) {
