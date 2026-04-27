@@ -178,38 +178,17 @@ export async function getArchivesTree() {
         })
       }
 
-      const departments = Array.from(deptMap.entries()).map((entry: any) => {
-        const [deptId, deptData] = entry
+      const departments = Array.from(deptMap.entries()).map(([deptId, deptData]: any) => {
         return {
           id: deptId,
           name: deptData.deptName,
-        promotions: Array.from(deptData.promotions.entries()).map((promoEntry: any) => {
-          const [promoId, promoData] = promoEntry
-
-          // Grouper les sessions à l'intérieur de la promotion
-          const sessionMap = new Map<string, { sessionName: string }>()
-          for (const arc of promoData.sessions) {
-            const sid = arc.sessionId
-            if (!sessionMap.has(sid)) {
-              sessionMap.set(sid, { sessionName: arc.session.name })
-            }
-          }
-
-          return {
+          promotions: Array.from(deptData.promotions.entries()).map(([promoId, promoData]: any) => ({
             id: promoId,
             name: promoData.promoName,
-            sessions: Array.from(sessionMap.entries()).map((sessionEntry: any) => {
-              const [sid, sdata] = sessionEntry
-              return {
-                id: sid,
-                name: sdata.sessionName,
-                students: []
-              }
-            })
-          }
-        })
-      }
-    })
+            sessions: promoData.sessions
+          }))
+        }
+      })
 
       return { year, departments }
     }))
