@@ -459,6 +459,19 @@ export async function traceStudents(formData: FormData) {
     return y >= Math.min(start, end) && y <= Math.max(start, end)
   })
 
+  // Helper: rang d'une session pour tri chronologique
+  const getSessionRank = (sessionName: string) => {
+    const s = sessionName.toUpperCase()
+    if ((s.includes('SS1') || s.includes('SS 1') || s.includes('SESSION 1')) && !s.includes('REC')) return 1
+    if (s.includes('SS1') || s.includes('SS 1') || s.includes('SESSION 1')) return 2
+    if ((s.includes('SS2') || s.includes('SS 2') || s.includes('SESSION 2')) && !s.includes('REC')) return 3
+    if (s.includes('SS2') || s.includes('SS 2') || s.includes('SESSION 2')) return 4
+    return 5
+  }
+
+  // Helper: normalisation de nom (même logique que le dashboard)
+  const normalizeName = (n: string) => n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, ' ').trim()
+
   // 4. Identifier toutes les "colonnes" uniques
   const checkpointsMap = new Map<string, { year: string, promo: string, session: string }>()
   filteredArchives.forEach((a: any) => {
@@ -469,22 +482,30 @@ export async function traceStudents(formData: FormData) {
   })
 
   const checkpoints = Array.from(checkpointsMap.values()).sort((a, b) => {
+    // 1. Trier par année
     if (a.year !== b.year) return a.year.localeCompare(b.year)
+    // 2. Trier par promotion
     if (a.promo !== b.promo) return a.promo.localeCompare(b.promo)
-    return a.session.localeCompare(b.session)
+    // 3. Trier par session dans le bon ordre chronologique
+    return getSessionRank(a.session) - getSessionRank(b.session)
   })
 
   // 5. Construire le tableau final
   const grid = studentNames.map((name: any) => {
+    const normName = normalizeName(name)
     const studentResults: any = { name }
     checkpoints.forEach((cp: any) => {
-      const match = filteredArchives.find((a: any) => 
-        a.student.name.includes(name) && 
-        a.academicYear === cp.year && 
-        a.promotion.name === cp.promo && 
+      const match = filteredArchives.find((a: any) =>
+        normalizeName(a.student.name) === normName &&
+        a.academicYear === cp.year &&
+        a.promotion.name === cp.promo &&
         a.session.name === cp.session
       )
-      studentResults[`${cp.year}|${cp.promo}|${cp.session}`] = match ? { decision: match.decision, link: match.referenceLink } : null
+      studentResults[`${cp.year}|${cp.promo}|${cp.session}`] = match ? { 
+        decision: match.decision, 
+        link: match.referenceLink,
+        year: match.academicYear
+      } : null
     })
     return studentResults
   })
@@ -502,9 +523,14 @@ export async function searchArchives(filters: {
 }) {
   const { query, facultyId, deptId, promoId, sessionId, year } = filters
 
+  const words = query.trim().split(/\s+/).filter(w => w.length > 0)
+  const studentSearchCondition = words.length > 0 
+    ? { AND: words.map(word => ({ name: { contains: word, mode: 'insensitive' as const } })) }
+    : undefined
+
   return await prisma.archive.findMany({
     where: {
-      student: { name: { contains: query, mode: 'insensitive' } },
+      student: studentSearchCondition,
       facultyId: facultyId || undefined,
       departmentId: deptId || undefined,
       promotionId: promoId || undefined,

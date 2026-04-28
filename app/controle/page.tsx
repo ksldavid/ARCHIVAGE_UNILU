@@ -296,6 +296,7 @@ export default function ControlePage() {
                                 }}>
                                   {res.decision}
                                 </span>
+                                <div style={{ fontSize: '0.6rem', color: '#94a3b8', marginTop: '2px' }}>{res.year}</div>
                                 {res.link && (
                                   <a href={`/api/download?url=${encodeURIComponent(res.link)}&name=${encodeURIComponent(cp.promo + '_' + cp.session)}`} style={{ color: 'var(--accent-cyan)', textDecoration: 'none', fontSize: '0.65rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '3px' }}>
                                     Fiche <ExternalLink size={10} />

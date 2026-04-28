@@ -29,8 +29,8 @@ export default function MainDashboard() {
   const [results, setResults] = useState<any[]>([])
   const [isSearching, setIsSearching] = useState(false)
 
-  // Selected Student for Modal
-  const [selectedArchive, setSelectedArchive] = useState<any | null>(null)
+  // Selected Student Group for Modal
+  const [selectedStudentGroup, setSelectedStudentGroup] = useState<any | null>(null)
 
   useEffect(() => {
     getAppData().then(data => {
@@ -79,6 +79,27 @@ export default function MainDashboard() {
   const selectedFaculty = faculties.find(f => f.id === selectedFacId)
   const departments = selectedFaculty ? selectedFaculty.departments : []
   const promotions = departments.find((d: any) => d.id === selectedDeptId)?.promotions || []
+
+  const groupedResults = React.useMemo(() => {
+    const groups: Record<string, { mainName: string, archives: any[] }> = {}
+    results.forEach(archive => {
+       // Normalisation simple: on enlève les accents et les espaces multiples, on met en majuscules.
+       // On NE TRIE PAS les mots car les noms suivent toujours la structure NOM+POSTNOM+PRENOM.
+       // Ainsi "KABUYA KAKESE PRISCA" ≠ "KAKESE KABUYA PRISCA" (deux personnes différentes).
+       const normName = archive.student.name
+         .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+         .toUpperCase()
+         .replace(/\s+/g, ' ')
+         .trim() + "_" + archive.facultyId;
+
+       if (!groups[normName]) {
+         groups[normName] = { mainName: archive.student.name, archives: [] }
+       }
+       groups[normName].archives.push(archive)
+    })
+    // Trier par nombre de dossiers puis par ordre alphabétique
+    return Object.values(groups).sort((a, b) => b.archives.length - a.archives.length || a.mainName.localeCompare(b.mainName))
+  }, [results])
 
   return (
     <div className="dashboard-wrapper" suppressHydrationWarning>
@@ -213,7 +234,7 @@ export default function MainDashboard() {
                 </div>
               ) : (
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(380px, 1fr))', gap: '20px' }}>
-                  {results.map((archive, i) => <ArchiveCard key={i} archive={archive} onClick={() => setSelectedArchive(archive)} />)}
+                  {groupedResults.map((group, i) => <StudentGroupCard key={i} group={group} onClick={() => setSelectedStudentGroup(group)} />)}
                 </div>
               )}
             </>
@@ -237,7 +258,7 @@ export default function MainDashboard() {
                   {recentArchives.length === 0 ? (
                     <p style={{ color: '#94a3b8', fontStyle: 'italic' }}>Aucune archive récente.</p>
                   ) : recentArchives.map((archive, i) => (
-                    <div key={i} onClick={() => setSelectedArchive(archive)} style={{ display: 'flex', gap: '14px', padding: '16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9', cursor: 'pointer', transition: 'all 0.2s' }} className="recent-item">
+                    <div key={i} onClick={() => { setQuery(archive.student.name); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={{ display: 'flex', gap: '14px', padding: '16px', background: '#f8fafc', borderRadius: '16px', border: '1px solid #f1f5f9', cursor: 'pointer', transition: 'all 0.2s' }} className="recent-item">
                       <div style={{ width: '40px', height: '40px', background: 'white', borderRadius: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, color: 'var(--primary-blue)', fontSize: '0.9rem', flexShrink: 0 }}>{archive.student.name.charAt(0)}</div>
                       <div style={{ minWidth: 0 }}>
                         <p style={{ margin: 0, fontWeight: 700, fontSize: '0.85rem', color: '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{archive.student.name}</p>
@@ -251,32 +272,69 @@ export default function MainDashboard() {
           )}
         </div>
 
-        {/* MODAL FICHE INDIVIDUELLE */}
-        {selectedArchive && (
+        {/* MODAL HISTORIQUE COMPLET ETUDIANT */}
+        {selectedStudentGroup && (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '20px' }}>
-            <div className="animate-fade-in" style={{ background: 'white', width: '100%', maxWidth: '700px', borderRadius: '30px', overflow: 'hidden', boxShadow: '0 30px 60px -12px rgba(0,0,0,0.3)' }}>
-              <div style={{ background: 'linear-gradient(135deg, #0a4a5c 0%, #166075 100%)', padding: '40px', color: 'white', position: 'relative' }}>
-                <button onClick={() => setSelectedArchive(null)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', width: '40px', height: '40px', borderRadius: '50%', cursor: 'pointer', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={24} /></button>
+            <div className="animate-fade-in" style={{ background: 'white', width: '100%', maxWidth: '900px', maxHeight: '90vh', display: 'flex', flexDirection: 'column', borderRadius: '30px', overflow: 'hidden', boxShadow: '0 30px 60px -12px rgba(0,0,0,0.3)' }}>
+              
+              <div style={{ background: 'linear-gradient(135deg, #0a4a5c 0%, #166075 100%)', padding: '30px 40px', color: 'white', position: 'relative', flexShrink: 0 }}>
+                <button onClick={() => setSelectedStudentGroup(null)} style={{ position: 'absolute', top: '20px', right: '20px', background: 'rgba(255,255,255,0.1)', border: 'none', width: '40px', height: '40px', borderRadius: '50%', cursor: 'pointer', color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }} className="hover-btn"><X size={24} /></button>
                 <div style={{ display: 'flex', gap: '24px', alignItems: 'center' }}>
-                  <div style={{ width: '80px', height: '80px', background: 'white', borderRadius: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', fontWeight: 900, color: '#0a4a5c', boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }}>{selectedArchive.student.name.charAt(0)}</div>
-                  <div><h2 style={{ margin: 0, fontSize: '1.8rem', fontWeight: 900, fontFamily: 'Outfit' }}>{selectedArchive.student.name}</h2><p style={{ margin: '5px 0 0 0', opacity: 0.8, fontSize: '1rem', fontWeight: 500 }}>{selectedArchive.faculty.name}</p></div>
+                  <div style={{ width: '70px', height: '70px', background: 'white', borderRadius: '20px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2rem', fontWeight: 900, color: '#0a4a5c', boxShadow: '0 10px 20px rgba(0,0,0,0.2)' }}>{selectedStudentGroup.mainName.charAt(0)}</div>
+                  <div>
+                    <h2 style={{ margin: 0, fontSize: '1.8rem', fontWeight: 900, fontFamily: 'Outfit' }}>{selectedStudentGroup.mainName}</h2>
+                    <p style={{ margin: '5px 0 0 0', opacity: 0.9, fontSize: '0.95rem', fontWeight: 500 }}>Historique académique complet — {selectedStudentGroup.archives.length} dossier{selectedStudentGroup.archives.length > 1 ? 's' : ''} trouvé{selectedStudentGroup.archives.length > 1 ? 's' : ''}</p>
+                  </div>
                 </div>
               </div>
-              <div style={{ padding: '40px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '30px', marginBottom: '40px' }}>
-                  <DetailItem icon={<Building2 size={18}/>} label="DÉPARTEMENT" value={selectedArchive.department.name} />
-                  <DetailItem icon={<GraduationCap size={18}/>} label="PROMOTION" value={selectedArchive.promotion.name} />
-                  <DetailItem icon={<Calendar size={18}/>} label="ANNÉE ACADÉMIQUE" value={selectedArchive.academicYear} />
-                  <DetailItem icon={<Database size={18}/>} label="SESSION D'EXAMEN" value={selectedArchive.session.name} />
-                </div>
-                <div style={{ background: '#f8fafc', borderRadius: '20px', padding: '24px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '30px', border: '1px solid #f1f5f9' }}>
-                  <div><p style={{ margin: 0, fontSize: '0.8rem', fontWeight: 800, color: '#94a3b8' }}>DÉCISION FINALE DU JURY</p><p style={{ margin: '4px 0 0 0', fontSize: '1.4rem', fontWeight: 900, color: '#1e293b' }}>{selectedArchive.decision}</p></div>
-                  <div style={{ padding: '12px 24px', borderRadius: '14px', fontWeight: 800, fontSize: '1.1rem', background: selectedArchive.decision.includes('ADM') ? '#dcfce7' : '#fef9c3', color: selectedArchive.decision.includes('ADM') ? '#166534' : '#854d0e' }}>{selectedArchive.decision.includes('ADM') ? 'ADMIS' : 'A JOURNER'}</div>
-                </div>
-                <div style={{ display: 'flex', gap: '15px' }}>
-                  <a href={`/api/download?url=${encodeURIComponent(selectedArchive.referenceLink)}&name=${encodeURIComponent(selectedArchive.student.name + '_' + selectedArchive.promotion.name)}`} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: '#0a4a5c', color: 'white', padding: '18px', borderRadius: '16px', fontWeight: 800, textDecoration: 'none', boxShadow: '0 10px 20px rgba(10,74,92,0.2)' }}><FileText size={20} /> Télécharger la Fiche</a>
-                  <button onClick={() => window.print()} style={{ padding: '18px 24px', background: '#f1f5f9', border: 'none', borderRadius: '16px', cursor: 'pointer', color: '#475569' }}><Printer size={20} /></button>
-                </div>
+              
+              <div style={{ padding: '0', overflowY: 'auto', flex: 1, background: '#f8fafc' }}>
+                 <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                   <thead style={{ position: 'sticky', top: 0, background: '#f1f5f9', zIndex: 1, boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+                     <tr>
+                       <th style={{ textAlign: 'left', padding: '16px 24px', fontSize: '0.75rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Année & Session</th>
+                       <th style={{ textAlign: 'left', padding: '16px 24px', fontSize: '0.75rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Département / Promotion</th>
+                       <th style={{ textAlign: 'center', padding: '16px 24px', fontSize: '0.75rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Décision</th>
+                       <th style={{ textAlign: 'right', padding: '16px 24px', fontSize: '0.75rem', color: '#64748b', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Fiche Originale</th>
+                     </tr>
+                   </thead>
+                   <tbody>
+                     {[...selectedStudentGroup.archives].sort((a,b) => {
+                       const yearDiff = b.academicYear.localeCompare(a.academicYear);
+                       if (yearDiff !== 0) return yearDiff;
+                       
+                       const getRank = (name: string) => {
+                         const s = name.toUpperCase();
+                         if (s.includes('SS1') || s.includes('SS 1') || s.includes('SESSION 1')) return s.includes('REC') ? 2 : 1;
+                         if (s.includes('SS2') || s.includes('SS 2') || s.includes('SESSION 2')) return s.includes('REC') ? 4 : 3;
+                         return 5;
+                       };
+                       return getRank(a.session.name) - getRank(b.session.name);
+                     }).map((archive: any, idx) => (
+                       <tr key={idx} style={{ borderBottom: '1px solid #e2e8f0', background: 'white', transition: 'background 0.2s' }} className="archive-row">
+                         <td style={{ padding: '16px 24px' }}>
+                           <p style={{ margin: 0, fontWeight: 800, color: '#1e293b' }}>{archive.academicYear}</p>
+                           <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#64748b', fontWeight: 600 }}>{archive.session.name}</p>
+                         </td>
+                         <td style={{ padding: '16px 24px' }}>
+                           <p style={{ margin: 0, fontWeight: 700, color: '#334155' }}>{archive.promotion.name}</p>
+                           <p style={{ margin: '4px 0 0 0', fontSize: '0.8rem', color: '#94a3b8' }}>{archive.department.name}</p>
+                         </td>
+                         <td style={{ padding: '16px 24px', textAlign: 'center' }}>
+                           <span style={{ display: 'inline-block', padding: '6px 14px', borderRadius: '12px', fontSize: '0.75rem', fontWeight: 800, background: (archive.decision.includes('ADM') || archive.decision.startsWith('A') || archive.decision.includes('V') || archive.decision.startsWith('R') || archive.decision.includes('COMP')) ? '#dcfce7' : '#fef9c3', color: (archive.decision.includes('ADM') || archive.decision.startsWith('A') || archive.decision.includes('V') || archive.decision.startsWith('R') || archive.decision.includes('COMP')) ? '#166534' : '#854d0e' }}>
+                             {archive.decision}
+                           </span>
+                         </td>
+                         <td style={{ padding: '16px 24px', textAlign: 'right' }}>
+                           <a href={`/api/download?url=${encodeURIComponent(archive.referenceLink)}&name=${encodeURIComponent(archive.student.name + '_' + archive.promotion.name)}`} 
+                              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', background: '#f1f5f9', color: '#0a4a5c', padding: '8px 14px', borderRadius: '10px', fontSize: '0.8rem', fontWeight: 700, textDecoration: 'none', transition: 'all 0.2s' }} className="dl-btn">
+                             <Download size={14} /> Télécharger
+                           </a>
+                         </td>
+                       </tr>
+                     ))}
+                   </tbody>
+                 </table>
               </div>
             </div>
           </div>
@@ -288,6 +346,9 @@ export default function MainDashboard() {
         .animate-fade-in { animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
         .student-card:hover { transform: translateY(-5px); box-shadow: 0 15px 35px rgba(0,0,0,0.1) !important; border-color: var(--accent-cyan) !important; }
         .recent-item:hover { background: #f0f9fb !important; border-color: var(--accent-cyan) !important; }
+        .archive-row:hover { background: #f8fafc !important; }
+        .dl-btn:hover { background: #e2e8f0 !important; }
+        .hover-btn:hover { background: rgba(255,255,255,0.2) !important; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .animate-spin { animation: spin 1s linear infinite; }
       `}</style>
@@ -295,23 +356,28 @@ export default function MainDashboard() {
   )
 }
 
-function ArchiveCard({ archive, onClick }: { archive: any, onClick: () => void }) {
+function StudentGroupCard({ group, onClick }: { group: any, onClick: () => void }) {
+  const sortedArchives = [...group.archives].sort((a, b) => b.academicYear.localeCompare(a.academicYear))
+  const latestFaculty = sortedArchives[0].faculty.name
+
   return (
     <div onClick={onClick} className="student-card" style={{ background: 'white', borderRadius: '20px', padding: '24px', boxShadow: '0 4px 15px rgba(0,0,0,0.04)', border: '1px solid #f1f5f9', transition: 'all 0.2s', cursor: 'pointer' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
         <div style={{ display: 'flex', gap: '16px' }}>
-          <div style={{ width: '48px', height: '48px', background: '#f0f9fb', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-cyan)' }}>{archive.student.name.charAt(0)}</div>
-          <div><h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--primary-blue)', fontWeight: 800 }}>{archive.student.name}</h3><p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{archive.faculty.name}</p></div>
+          <div style={{ width: '48px', height: '48px', background: '#f0f9fb', borderRadius: '12px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-cyan)' }}>{group.mainName.charAt(0)}</div>
+          <div><h3 style={{ margin: 0, fontSize: '1rem', color: 'var(--primary-blue)', fontWeight: 800 }}>{group.mainName}</h3><p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{latestFaculty}</p></div>
         </div>
-        <span style={{ padding: '4px 10px', borderRadius: '8px', fontSize: '0.7rem', fontWeight: 800, background: archive.decision.includes('ADM') ? '#dcfce7' : '#fef9c3', color: archive.decision.includes('ADM') ? '#166534' : '#854d0e' }}>{archive.decision}</span>
+        <span style={{ padding: '6px 12px', borderRadius: '10px', fontSize: '0.75rem', fontWeight: 800, background: '#f0f9fb', color: 'var(--primary-blue)' }}>{group.archives.length} Dossier{group.archives.length > 1 ? 's' : ''}</span>
       </div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', marginBottom: '15px', background: '#f8fafc', padding: '12px', borderRadius: '12px', fontSize: '0.75rem' }}>
-        <div><p style={{ margin: 0, color: '#94a3b8', fontWeight: 700 }}>DÉPT</p><p style={{ margin: 0, fontWeight: 700, color: '#475569' }}>{archive.department.name}</p></div>
-        <div><p style={{ margin: 0, color: '#94a3b8', fontWeight: 700 }}>ANNÉE</p><p style={{ margin: 0, fontWeight: 700, color: '#475569' }}>{archive.academicYear}</p></div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '15px' }}>
+         {sortedArchives.slice(0, 3).map((a: any, i: number) => (
+           <span key={i} style={{ padding: '4px 8px', background: '#f8fafc', borderRadius: '6px', fontSize: '0.7rem', color: '#475569', border: '1px solid #e2e8f0', fontWeight: 600 }}>{a.academicYear} ({a.promotion.name})</span>
+         ))}
+         {sortedArchives.length > 3 && <span style={{ padding: '4px 8px', background: '#f8fafc', borderRadius: '6px', fontSize: '0.7rem', color: '#475569', border: '1px solid #e2e8f0', fontWeight: 600 }}>+{sortedArchives.length - 3}</span>}
       </div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{archive.promotion.name}</span>
-        <ChevronRight size={16} color="#cbd5e1" />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '10px', borderTop: '1px dashed #f1f5f9', paddingTop: '15px' }}>
+        <span style={{ fontSize: '0.8rem', color: 'var(--accent-cyan)', fontWeight: 700 }}>Voir l'historique complet</span>
+        <ChevronRight size={16} color="var(--accent-cyan)" />
       </div>
     </div>
   )
